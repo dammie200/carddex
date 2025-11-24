@@ -1,0 +1,60 @@
+// Prisma schema for CardDex Pokémon TCG tracker
+// Run `npm run prisma:generate` to create the Prisma client once dependencies are installed.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum Condition {
+  Mint
+  NearMint
+  LightlyPlayed
+  ModeratelyPlayed
+  HeavilyPlayed
+  Damaged
+}
+
+enum Finish {
+  Normal
+  Holo
+  ReverseHolo
+  FullArt
+  Gold
+  Rainbow
+  TrainerGallery
+  Other
+}
+
+model Card {
+  id                 String   @id
+  name               String
+  setId              String
+  setName            String
+  setSeries          String?
+  printedTotal       Int?
+  number             String
+  rarity             String?
+  imageSmallUrl      String
+  imageLargeUrl      String
+  tcgplayerProductId Int?
+  collectionEntries  CollectionEntry[]
+}
+
+model CollectionEntry {
+  id            Int       @id @default(autoincrement())
+  cardId        String
+  card          Card      @relation(fields: [cardId], references: [id])
+  quantity      Int       @default(1)
+  condition     Condition @default(NearMint)
+  language      String    @default("EN")
+  finish        Finish    @default(Normal)
+  purchasePrice Float?
+  notes         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
