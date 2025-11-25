@@ -10,7 +10,7 @@ const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient({ log: ["warn", "error"] });
 
 const GITHUB_CARDS_URL =
-  "https://raw.githubusercontent.com/PokemonTCG/pokemon-tcg-data/master/json/en/en.json";
+  "https://raw.githubusercontent.com/PokemonTCG/pokemon-tcg-data/master/cards/en.json";
 const API_BASE = "https://api.pokemontcg.io/v2";
 const API_KEY = process.env.POKEMONTCG_API_KEY;
 const PAGE_SIZE = 250;
@@ -187,16 +187,24 @@ async function main() {
   const allCards = await fetchCatalog();
 
   console.log(`Fetched ${allCards.length} cards. Updating database...`);
-  await prisma.$transaction(async (tx) => {
-    await tx.card.deleteMany();
-    const chunks = [];
-    for (let i = 0; i < allCards.length; i += 250) {
-      chunks.push(allCards.slice(i, i + 250));
-    }
-    for (const chunk of chunks) {
-      await tx.card.createMany({ data: chunk.map(mapCard) });
-    }
-  });
+  const chunks = [];
+  for (let i = 0; i < allCards.length; i += 250) {
+    chunks.push(allCards.slice(i, i + 250));
+  }
+
+  for (const chunk of chunks) {
+    await prisma.$transaction(async (tx) => {
+      await Promise.all(
+        chunk.map((card) =>
+          tx.card.upsert({
+            where: { id: card.id },
+            update: mapCard(card),
+            create: mapCard(card),
+          })
+        )
+      );
+    });
+  }
 
   console.log("Sync complete. Close Prisma...");
   await prisma.$disconnect();
