@@ -7,6 +7,8 @@
 const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient({ log: ["warn", "error"] });
 
+const GITHUB_CARDS_URL =
+  "https://raw.githubusercontent.com/PokemonTCG/pokemon-tcg-data/master/cards/en.json";
 const API_BASE = "https://api.pokemontcg.io/v2";
 const API_KEY = process.env.POKEMONTCG_API_KEY;
 const PAGE_SIZE = 250;
@@ -89,22 +91,50 @@ function mapCard(card) {
   };
 }
 
-async function fetchPage(page) {
-  const url = `${API_BASE}/cards?page=${page}&pageSize=${PAGE_SIZE}`;
-  const res = await fetch(url, {
-    headers: {
-      "Content-Type": "application/json",
-      ...(API_KEY ? { "X-Api-Key": API_KEY } : {}),
-    },
+async function fetchFromGithub() {
+  const res = await fetch(GITHUB_CARDS_URL, {
+    headers: { "Content-Type": "application/json" },
   });
   if (!res.ok) {
-    throw new Error(`PokémonTCG API error ${res.status}`);
+    throw new Error(`Github catalog fetch failed ${res.status}`);
   }
   return res.json();
 }
 
-async function main() {
-  console.log("Starting catalog sync...");
+async function fetchPage(page) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 10000);
+  const url = `${API_BASE}/cards?page=${page}&pageSize=${PAGE_SIZE}`;
+  try {
+    const res = await fetch(url, {
+      headers: {
+        "Content-Type": "application/json",
+        ...(API_KEY ? { "X-Api-Key": API_KEY } : {}),
+      },
+      signal: controller.signal,
+    });
+    if (!res.ok) {
+      throw new Error(`PokémonTCG API error ${res.status}`);
+    }
+    return res.json();
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function fetchCatalog() {
+  try {
+    console.log("Fetching catalog from GitHub dataset...");
+    const data = await fetchFromGithub();
+    if (Array.isArray(data) && data.length) {
+      return data;
+    }
+    console.warn("GitHub dataset empty, falling back to API pages...");
+  } catch (err) {
+    console.warn("GitHub dataset fetch failed:", err.message);
+  }
+
+  console.log("Falling back to PokémonTCG paginated API...");
   const firstPage = await fetchPage(1);
   const totalCount = firstPage.totalCount ?? firstPage.data?.length ?? 0;
   const totalPages = Math.min(Math.ceil(totalCount / PAGE_SIZE), MAX_PAGES);
@@ -115,6 +145,13 @@ async function main() {
     const pageData = await fetchPage(page);
     allCards = allCards.concat(pageData.data ?? []);
   }
+
+  return allCards;
+}
+
+async function main() {
+  console.log("Starting catalog sync...");
+  const allCards = await fetchCatalog();
 
   console.log(`Fetched ${allCards.length} cards. Updating database...`);
   await prisma.$transaction(async (tx) => {
