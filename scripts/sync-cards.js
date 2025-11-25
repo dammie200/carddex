@@ -144,13 +144,14 @@ function mapCard(card) {
     price = generateFallbackPrice(card);
   }
   const set = card.set ?? null;
+  const printedTotal = coalesce(set?.printedTotal, set?.total, card.printedTotal, card.total, null);
   return {
     id: card.id,
     name: card.name,
     setId: coalesce(set?.id, card.setId, ""),
     setName: coalesce(set?.name, card.setName, ""),
     setSeries: coalesce(set?.series, card.setSeries, null),
-    printedTotal: coalesce(set?.printedTotal, card.printedTotal, null),
+    printedTotal,
     number: card.number,
     rarity: card.rarity ?? null,
     imageSmallUrl: coalesce(card.images?.small, card.imageSmallUrl, ""),
