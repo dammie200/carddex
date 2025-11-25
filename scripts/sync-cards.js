@@ -4,15 +4,19 @@
   Usage: npm run sync:cards
 */
 
+const fs = require("fs");
+const path = require("path");
 const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient({ log: ["warn", "error"] });
 
 const GITHUB_CARDS_URL =
-  "https://raw.githubusercontent.com/PokemonTCG/pokemon-tcg-data/master/cards/en.json";
+  "https://raw.githubusercontent.com/PokemonTCG/pokemon-tcg-data/master/json/en/en.json";
 const API_BASE = "https://api.pokemontcg.io/v2";
 const API_KEY = process.env.POKEMONTCG_API_KEY;
 const PAGE_SIZE = 250;
 const MAX_PAGES = 200;
+
+const SAMPLE_PATH = path.join(__dirname, "../data/sample-cards.json");
 
 function addVariant(variants, finish, value) {
   if (!value.marketPrice && !value.lowPrice && !value.midPrice && !value.highPrice) return;
@@ -27,6 +31,8 @@ function addVariant(variants, finish, value) {
 }
 
 function mapPricesFromCard(card) {
+  if (card.price) return card.price;
+
   const variants = new Map();
   const tcgPrices = card.tcgplayer?.prices;
   if (tcgPrices) {
@@ -74,7 +80,17 @@ function mapPricesFromCard(card) {
 }
 
 function mapCard(card) {
-  const price = mapPricesFromCard(card);
+  let price = null;
+  if (card.priceJson) {
+    try {
+      price = typeof card.priceJson === "string" ? JSON.parse(card.priceJson) : card.priceJson;
+    } catch (_) {
+      price = null;
+    }
+  }
+  if (!price) {
+    price = mapPricesFromCard(card);
+  }
   return {
     id: card.id,
     name: card.name,
@@ -99,6 +115,16 @@ async function fetchFromGithub() {
     throw new Error(`Github catalog fetch failed ${res.status}`);
   }
   return res.json();
+}
+
+async function fetchFromSample() {
+  const contents = await fs.promises.readFile(SAMPLE_PATH, "utf8");
+  const parsed = JSON.parse(contents);
+  if (!Array.isArray(parsed) || !parsed.length) {
+    throw new Error("Bundled sample dataset is empty");
+  }
+  console.warn(`Using bundled sample dataset (${parsed.length} cards).`);
+  return parsed;
 }
 
 async function fetchPage(page) {
@@ -135,18 +161,25 @@ async function fetchCatalog() {
   }
 
   console.log("Falling back to PokémonTCG paginated API...");
-  const firstPage = await fetchPage(1);
-  const totalCount = firstPage.totalCount ?? firstPage.data?.length ?? 0;
-  const totalPages = Math.min(Math.ceil(totalCount / PAGE_SIZE), MAX_PAGES);
-  let allCards = firstPage.data ?? [];
+  try {
+    const firstPage = await fetchPage(1);
+    const totalCount = firstPage.totalCount ?? firstPage.data?.length ?? 0;
+    const totalPages = Math.min(Math.ceil(totalCount / PAGE_SIZE), MAX_PAGES);
+    let allCards = firstPage.data ?? [];
 
-  for (let page = 2; page <= totalPages; page++) {
-    console.log(`Fetching page ${page}/${totalPages}`);
-    const pageData = await fetchPage(page);
-    allCards = allCards.concat(pageData.data ?? []);
+    for (let page = 2; page <= totalPages; page++) {
+      console.log(`Fetching page ${page}/${totalPages}`);
+      const pageData = await fetchPage(page);
+      allCards = allCards.concat(pageData.data ?? []);
+    }
+
+    return allCards;
+  } catch (err) {
+    console.warn("API pagination failed:", err.message);
   }
 
-  return allCards;
+  console.warn("All remote catalog sources failed. Falling back to bundled sample data.");
+  return fetchFromSample();
 }
 
 async function main() {

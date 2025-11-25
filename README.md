@@ -21,10 +21,10 @@ POKEMONTCG_API_KEY=your_pokemontcg_api_key
 ```bash
 npm run prisma:migrate   # apply the checked-in migration to dev.db
 npm run prisma:generate  # optional; dev server will also generate the client when needed
-npm run sync:cards       # pulls the public PokémonTCG catalog from GitHub into SQLite for fast local searches
+npm run sync:cards       # pulls the public PokémonTCG catalog (or a bundled sample) into SQLite for fast local searches
 ```
 
-If the GitHub download is temporarily unavailable, the sync script falls back to the PokémonTCG paginated API. If you skip the sync step, CardDex seeds a small built-in sample set so you can still try the UI. You can re-run `npm run sync:cards` anytime to refresh cards and price data.
+The sync script tries the public PokémonTCG GitHub dataset first, then the PokémonTCG paginated API, and finally a bundled sample set so the command succeeds even when external downloads fail. You can re-run `npm run sync:cards` anytime to refresh cards and price data.
 
 4. Start the dev server:
 
@@ -35,7 +35,7 @@ npm run dev
 The app will be available at `http://localhost:3000`. The `npm run dev` script applies migrations before starting to avoid missing-table errors.
 
 ## How pricing works now
-- Prices come from the `tcgplayer` and `cardmarket` fields included in the catalog data (sourced from the public PokémonTCG GitHub dataset or the PokémonTCG.io API fallback) during the catalog sync.
+- Prices come from the `tcgplayer` and `cardmarket` fields included in the catalog data (sourced from the public PokémonTCG GitHub dataset, the PokémonTCG.io API fallback, or the bundled sample) during the catalog sync.
 - No direct TCGplayer API calls are made at runtime; searches and pricing are purely local once the catalog is synced.
 
 ## Key features
