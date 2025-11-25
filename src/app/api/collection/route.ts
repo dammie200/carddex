@@ -19,7 +19,12 @@ export async function GET() {
 
   const withPrices = await Promise.all(
     entries.map(async (entry) => {
-      const remoteCard = await getCardById(entry.cardId);
+      let remoteCard: CardSummary | null = null;
+      try {
+        remoteCard = await getCardById(entry.cardId);
+      } catch (err) {
+        console.error("Failed to fetch card price", err);
+      }
       return {
         ...entry,
         price: remoteCard?.price ?? null,

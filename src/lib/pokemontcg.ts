@@ -3,6 +3,9 @@ import { CardPriceData, CardSummary, FinishVariant, PriceVariant } from "@/types
 const API_BASE = "https://api.pokemontcg.io/v2";
 const API_KEY = process.env.POKEMONTCG_API_KEY;
 
+const cardCache = new Map<string, { card: CardSummary; fetchedAt: number }>();
+const CACHE_TTL_MS = 10 * 60 * 1000;
+
 function addVariant(
   variants: Map<FinishVariant, PriceVariant>,
   finish: FinishVariant,
@@ -91,23 +94,40 @@ function mapCard(card: any, includePrices = false): CardSummary {
   } as CardSummary;
 }
 
-async function fetchJson(url: string, opts: { allow404Empty?: boolean } = {}) {
-  const res = await fetch(url, {
-    headers: {
-      "Content-Type": "application/json",
-      ...(API_KEY ? { "X-Api-Key": API_KEY } : {}),
-    },
-    cache: "no-store",
-  });
+async function fetchJson(
+  url: string,
+  opts: { allow404Empty?: boolean; timeoutMs?: number } = {}
+) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), opts.timeoutMs ?? 10000);
 
-  if (res.status === 404 && opts.allow404Empty) {
-    return { data: [] };
-  }
+  try {
+    const res = await fetch(url, {
+      headers: {
+        "Content-Type": "application/json",
+        ...(API_KEY ? { "X-Api-Key": API_KEY } : {}),
+      },
+      cache: "no-store",
+      signal: controller.signal,
+    });
 
-  if (!res.ok) {
-    throw new Error(`PokémonTCG API error ${res.status}`);
+    if (res.status === 404 && opts.allow404Empty) {
+      return { data: [] };
+    }
+
+    if (!res.ok) {
+      throw new Error(`PokémonTCG API error ${res.status}`);
+    }
+
+    return res.json();
+  } catch (err: any) {
+    if (err?.name === "AbortError") {
+      throw new Error("PokémonTCG API timeout");
+    }
+    throw err;
+  } finally {
+    clearTimeout(timeout);
   }
-  return res.json();
 }
 
 export async function searchCardsByName(query: string): Promise<CardSummary[]> {
@@ -148,13 +168,26 @@ export async function searchCardsByNumberId(cardId: string): Promise<CardSummary
 }
 
 export async function getCardById(id: string): Promise<CardSummary | null> {
+  const cached = cardCache.get(id);
+  if (cached && Date.now() - cached.fetchedAt < CACHE_TTL_MS) {
+    return cached.card;
+  }
+
   const url = `${API_BASE}/cards/${id}`;
   try {
     const data = await fetchJson(url, { allow404Empty: true });
     if (!data?.data) return null;
-    return mapCard(data.data, true);
+    const mapped = mapCard(data.data, true);
+    cardCache.set(id, { card: mapped, fetchedAt: Date.now() });
+    return mapped;
   } catch (error) {
-    if (error instanceof Error && error.message.includes("404")) return null;
+    if (error instanceof Error) {
+      if (error.message.includes("404")) return null;
+      // If the upstream API is flaky, return null so the UI can still render existing data.
+      if (error.message.includes("timeout") || error.message.includes("504")) {
+        return null;
+      }
+    }
     throw error;
   }
 }
