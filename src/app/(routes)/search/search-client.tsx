@@ -12,15 +12,26 @@ export function SearchClient() {
   const [loading, setLoading] = useState(false);
   const [selected, setSelected] = useState<CardSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [hasSearched, setHasSearched] = useState(false);
 
   async function search(type: "name" | "number") {
     setLoading(true);
     setError(null);
+    setHasSearched(true);
     try {
       const q = type === "name" ? nameQuery : numberQuery;
       const res = await fetch(`/api/search/${type === "name" ? "name" : "number"}?${type === "name" ? `q=${encodeURIComponent(q)}` : `id=${encodeURIComponent(q)}`}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to search");
+      if (!data.cards?.length) {
+        setResults([]);
+        setError(
+          type === "name"
+            ? `Geen kaarten gevonden voor "${q.trim()}".`
+            : "Geen kaarten gevonden met dit kaartnummer."
+        );
+        return;
+      }
       setResults(data.cards);
     } catch (err: any) {
       setError(err.message);
@@ -77,8 +88,8 @@ export function SearchClient() {
         {error && <div className="mt-3 text-sm text-rose-300">{error}</div>}
         <div className="mt-4 grid gap-3 md:grid-cols-2 lg:grid-cols-3">
           {loading && <div className="text-slate-300">Loading...</div>}
-          {!loading && !error && results.length === 0 && (
-            <div className="text-slate-400">No results yet.</div>
+          {!loading && !error && results.length === 0 && hasSearched && (
+            <div className="text-slate-400">Geen resultaten gevonden.</div>
           )}
           {results.map((card) => (
             <CardResult key={card.id} card={card} onSelect={(c) => setSelected(c)} />
