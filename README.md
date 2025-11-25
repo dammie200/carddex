@@ -17,18 +17,17 @@ DATABASE_URL="file:./dev.db"
 POKEMONTCG_API_KEY=your_pokemontcg_api_key
 ```
 
-3. Create the SQLite schema and generate the Prisma client:
+3. Initialize the SQLite schema and start the dev server:
 
 ```bash
-npm run prisma:migrate
-npm run prisma:generate
-npm run dev
+npm run prisma:migrate   # apply the checked-in migration to dev.db
+npm run prisma:generate  # optional; dev server will also generate the client when needed
+npm run dev              # runs migrations again on startup to ensure tables exist, then launches Next.js
 ```
 
-The app will be available at `http://localhost:3000`.
-
-If you encounter missing table errors (for example when the dashboard loads), ensure the migration step above has been executed t
-o create `Card` and `CollectionEntry` tables in `dev.db`.
+The app will be available at `http://localhost:3000`. The `npm run dev` script now applies migrations before starting, so you wo
+n't see "table does not exist" errors even on a fresh checkout. If you do, manually rerun `npm run prisma:migrate` to recreate t
+he `Card` and `CollectionEntry` tables in `dev.db`.
 
 ## Key features
 - **Dashboard** with unique card count, total quantity, and recent additions.

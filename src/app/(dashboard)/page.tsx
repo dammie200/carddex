@@ -1,23 +1,45 @@
 import { prisma } from "@/lib/prisma";
 import Link from "next/link";
 
-async function getStats() {
-  const [totalEntries, uniqueCardIds, entries] = await Promise.all([
-    prisma.collectionEntry.aggregate({ _sum: { quantity: true } }),
-    prisma.collectionEntry.findMany({ distinct: ["cardId"], select: { cardId: true } }),
-    prisma.collectionEntry.findMany({ include: { card: true }, orderBy: { createdAt: "desc" }, take: 5 }),
-  ]);
-  return {
-    totalQuantity: totalEntries._sum.quantity ?? 0,
-    uniqueCards: uniqueCardIds.length,
-    recent: entries,
-  };
+type DashboardStats = {
+  totalQuantity: number;
+  uniqueCards: number;
+  recent: Awaited<ReturnType<typeof prisma.collectionEntry.findMany>>;
+  error?: string;
+};
+
+async function getStats(): Promise<DashboardStats> {
+  try {
+    const [totalEntries, uniqueCardIds, entries] = await Promise.all([
+      prisma.collectionEntry.aggregate({ _sum: { quantity: true } }),
+      prisma.collectionEntry.findMany({ distinct: ["cardId"], select: { cardId: true } }),
+      prisma.collectionEntry.findMany({ include: { card: true }, orderBy: { createdAt: "desc" }, take: 5 }),
+    ]);
+    return {
+      totalQuantity: totalEntries._sum.quantity ?? 0,
+      uniqueCards: uniqueCardIds.length,
+      recent: entries,
+    };
+  } catch (error) {
+    console.error("Failed to load dashboard stats. Ensure database migrations have been applied.", error);
+    return {
+      totalQuantity: 0,
+      uniqueCards: 0,
+      recent: [],
+      error: "Database not initialized. Run 'npm run prisma:migrate' once to create the tables.",
+    };
+  }
 }
 
 export default async function DashboardPage() {
   const stats = await getStats();
   return (
     <div className="space-y-8">
+      {stats.error && (
+        <div className="rounded border border-amber-500/40 bg-amber-500/10 p-4 text-sm text-amber-100">
+          {stats.error}
+        </div>
+      )}
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
         <StatCard label="Unique cards" value={stats.uniqueCards} />
         <StatCard label="Total cards" value={stats.totalQuantity} />
