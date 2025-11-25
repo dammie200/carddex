@@ -10,10 +10,9 @@ CardDex is a lightweight Next.js app for tracking your physical Pokémon TCG col
 npm install
 ```
 
-2. Set up your environment in `.env.local`:
+2. (Optional) Add your PokémonTCG API key in `.env.local`:
 
 ```
-DATABASE_URL="file:./dev.db"
 POKEMONTCG_API_KEY=your_pokemontcg_api_key
 ```
 
