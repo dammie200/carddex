@@ -81,7 +81,7 @@ export async function findCardsByName(query: string) {
   await ensureCardCatalog();
   if (!query.trim()) return [];
   const cards = await prisma.card.findMany({
-    where: { name: { contains: query.trim(), mode: "insensitive" } },
+    where: { name: { contains: query.trim() } },
     orderBy: [{ name: "asc" }],
     take: 50,
   });
@@ -111,7 +111,7 @@ export async function findCardsByNumber(rawId: string) {
 
   const fallbackMatches = await prisma.card.findMany({
     where: {
-      number: { contains: numberPart, mode: "insensitive" },
+      number: { contains: numberPart },
     },
     orderBy: [{ name: "asc" }],
     take: 50,
