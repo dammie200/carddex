@@ -2,14 +2,14 @@ import { prisma } from "@/lib/prisma";
 import Link from "next/link";
 
 async function getStats() {
-  const [totalEntries, uniqueCards, entries] = await Promise.all([
+  const [totalEntries, uniqueCardIds, entries] = await Promise.all([
     prisma.collectionEntry.aggregate({ _sum: { quantity: true } }),
-    prisma.collectionEntry.count({ distinct: "cardId" }),
+    prisma.collectionEntry.findMany({ distinct: ["cardId"], select: { cardId: true } }),
     prisma.collectionEntry.findMany({ include: { card: true }, orderBy: { createdAt: "desc" }, take: 5 }),
   ]);
   return {
     totalQuantity: totalEntries._sum.quantity ?? 0,
-    uniqueCards,
+    uniqueCards: uniqueCardIds.length,
     recent: entries,
   };
 }
