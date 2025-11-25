@@ -1,12 +1,15 @@
+import fs from "fs/promises";
+import path from "path";
+
 import { CardPriceData, CardSummary, FinishVariant, PriceVariant } from "@/types";
 
 const API_BASE = "https://api.pokemontcg.io/v2";
 const API_KEY = process.env.POKEMONTCG_API_KEY;
+const DISK_CACHE_PATH = path.join(process.cwd(), ".next", "pokemontcg-catalog.json");
 
-const cardCache = new Map<string, { card: CardSummary; fetchedAt: number }>();
-const nameSearchCache = new Map<string, { results: CardSummary[]; fetchedAt: number }>();
-const numberSearchCache = new Map<string, { results: CardSummary[]; fetchedAt: number }>();
-const CACHE_TTL_MS = 10 * 60 * 1000;
+const CACHE_TTL_MS = 12 * 60 * 60 * 1000; // 12h cache for the full catalog
+let catalogPromise: Promise<CardSummary[]> | null = null;
+let catalogCache: { cards: CardSummary[]; fetchedAt: number } | null = null;
 
 function addVariant(
   variants: Map<FinishVariant, PriceVariant>,
@@ -101,7 +104,7 @@ async function fetchJson(
   opts: { allow404Empty?: boolean; timeoutMs?: number } = {}
 ) {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), opts.timeoutMs ?? 7000);
+  const timeout = setTimeout(() => controller.abort(), opts.timeoutMs ?? 8000);
 
   try {
     const res = await fetch(url, {
@@ -132,90 +135,151 @@ async function fetchJson(
   }
 }
 
+async function fetchJsonWithRetry(url: string, opts: { allow404Empty?: boolean; timeoutMs?: number } = {}, retries = 2) {
+  let lastError: any;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      return await fetchJson(url, opts);
+    } catch (err) {
+      lastError = err;
+      if (attempt === retries) break;
+      await new Promise((resolve) => setTimeout(resolve, 500 * (attempt + 1)));
+    }
+  }
+  throw lastError;
+}
+
+async function readDiskCache(): Promise<{ cards: CardSummary[]; fetchedAt: number } | null> {
+  try {
+    const raw = await fs.readFile(DISK_CACHE_PATH, "utf8");
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed.cards) && typeof parsed.fetchedAt === "number") {
+      return parsed as { cards: CardSummary[]; fetchedAt: number };
+    }
+  } catch (err) {
+    // Ignore missing cache or JSON issues
+  }
+  return null;
+}
+
+async function writeDiskCache(cards: CardSummary[]) {
+  try {
+    await fs.mkdir(path.dirname(DISK_CACHE_PATH), { recursive: true });
+    await fs.writeFile(DISK_CACHE_PATH, JSON.stringify({ cards, fetchedAt: Date.now() }), "utf8");
+  } catch (err) {
+    // Non-fatal if disk cache cannot be written
+  }
+}
+
+async function fetchCatalog(): Promise<CardSummary[]> {
+  const pageSize = 250;
+  const selectFields = [
+    "id",
+    "name",
+    "number",
+    "rarity",
+    "set.name",
+    "set.id",
+    "set.series",
+    "set.printedTotal",
+    "images.small",
+    "images.large",
+    "tcgplayer",
+    "cardmarket",
+  ].join(",");
+
+  const results: CardSummary[] = [];
+  let page = 1;
+
+  while (true) {
+    const url = `${API_BASE}/cards?page=${page}&pageSize=${pageSize}&select=${encodeURIComponent(selectFields)}`;
+    const data = await fetchJsonWithRetry(url, { allow404Empty: true, timeoutMs: 7000 });
+    const cards = data?.data ?? [];
+    if (!cards.length) break;
+    results.push(...cards.map((card: any) => mapCard(card, true)));
+    if (cards.length < pageSize) break;
+    page += 1;
+  }
+
+  return results;
+}
+
+async function loadCatalog(force = false): Promise<CardSummary[]> {
+  const now = Date.now();
+  if (!catalogCache) {
+    const disk = await readDiskCache();
+    if (disk) {
+      catalogCache = disk;
+    }
+  }
+
+  if (!force && catalogCache && now - catalogCache.fetchedAt < CACHE_TTL_MS) {
+    return catalogCache.cards;
+  }
+
+  if (!force && catalogPromise) {
+    return catalogPromise;
+  }
+
+  const promise = (async () => {
+    try {
+      const cards = await fetchCatalog();
+      catalogCache = { cards, fetchedAt: Date.now() };
+      await writeDiskCache(cards);
+      return cards;
+    } catch (err) {
+      if (catalogCache) {
+        return catalogCache.cards;
+      }
+      throw new Error("PokémonTCG catalog could not be fetched. Please retry in a moment.");
+    }
+  })();
+
+  catalogPromise = promise;
+  try {
+    return await promise;
+  } finally {
+    catalogPromise = null;
+  }
+}
+
 export async function searchCardsByName(query: string): Promise<CardSummary[]> {
-  if (!query) return [];
   const sanitized = query.trim();
   if (!sanitized) return [];
 
-  const cached = nameSearchCache.get(sanitized);
-  const isFresh = cached && Date.now() - cached.fetchedAt < CACHE_TTL_MS;
-
-  const exactUrl = `${API_BASE}/cards?q=${encodeURIComponent(`name:"${sanitized}"`)}`;
-  try {
-    let data = await fetchJson(exactUrl, { allow404Empty: true });
-
-    if (!data.data?.length) {
-      const fallbackUrl = `${API_BASE}/cards?q=${encodeURIComponent(`name:${sanitized}`)}`;
-      data = await fetchJson(fallbackUrl, { allow404Empty: true });
-    }
-
-    const results = (data.data || []).map((card: any) => mapCard(card));
-    nameSearchCache.set(sanitized, { results, fetchedAt: Date.now() });
-    return results;
-  } catch (error) {
-    if (isFresh && cached) {
-      return cached.results;
-    }
-    throw error;
-  }
+  const catalog = await loadCatalog();
+  const needle = sanitized.toLowerCase();
+  const results = catalog.filter((card) => card.name.toLowerCase().includes(needle));
+  return results.slice(0, 100);
 }
 
 export async function searchCardsByNumberId(cardId: string): Promise<CardSummary[]> {
   const trimmed = cardId.trim();
   if (!trimmed) return [];
-  const cached = numberSearchCache.get(trimmed);
-  const isFresh = cached && Date.now() - cached.fetchedAt < CACHE_TTL_MS;
-  const parts = trimmed.split("/");
+
+  const catalog = await loadCatalog();
+  const parts = trimmed.split("/").map((p) => p.trim()).filter(Boolean);
   const number = parts[0];
   const total = parts[1];
-  const queryParts = [`number:${number}`];
+
+  let matches = catalog.filter((card) => card.number === number || card.number?.startsWith(number));
   if (total) {
-    queryParts.push(`set.printedTotal:${total}`);
+    matches = matches.filter((card) => !card.printedTotal || String(card.printedTotal) === total);
   }
-  const url = `${API_BASE}/cards?q=${encodeURIComponent(queryParts.join(" "))}`;
 
-  try {
-    let data = await fetchJson(url, { allow404Empty: true });
-    if ((!data.data || data.data.length === 0) && total) {
-      const fallbackUrl = `${API_BASE}/cards?q=${encodeURIComponent(`number:${number}`)}`;
-      data = await fetchJson(fallbackUrl, { allow404Empty: true });
-    }
+  // Prefer exact printedTotal matches first
+  matches.sort((a, b) => {
+    const aExact = total && a.printedTotal && String(a.printedTotal) === total ? 1 : 0;
+    const bExact = total && b.printedTotal && String(b.printedTotal) === total ? 1 : 0;
+    return bExact - aExact;
+  });
 
-    const results = (data.data || []).map((card: any) => mapCard(card));
-    numberSearchCache.set(trimmed, { results, fetchedAt: Date.now() });
-    return results;
-  } catch (error) {
-    if (isFresh && cached) {
-      return cached.results;
-    }
-    throw error;
-  }
+  return matches.slice(0, 100);
 }
 
 export async function getCardById(id: string): Promise<CardSummary | null> {
-  const cached = cardCache.get(id);
-  if (cached && Date.now() - cached.fetchedAt < CACHE_TTL_MS) {
-    return cached.card;
-  }
-
-  const url = `${API_BASE}/cards/${id}`;
-  try {
-    const data = await fetchJson(url, { allow404Empty: true });
-    if (!data?.data) return cached?.card ?? null;
-    const mapped = mapCard(data.data, true);
-    cardCache.set(id, { card: mapped, fetchedAt: Date.now() });
-    return mapped;
-  } catch (error) {
-    if (cached) {
-      return cached.card;
-    }
-    if (error instanceof Error) {
-      if (error.message.includes("404")) return null;
-      // If the upstream API is flaky, return null so the UI can still render existing data.
-      if (error.message.includes("timeout") || error.message.includes("504")) {
-        return null;
-      }
-    }
-    return null;
-  }
+  if (!id) return null;
+  const catalog = await loadCatalog();
+  const found = catalog.find((card) => card.id === id);
+  return found ?? null;
 }
