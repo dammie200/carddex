@@ -1,15 +1,12 @@
-import fs from "fs/promises";
-import path from "path";
-
 import { CardPriceData, CardSummary, FinishVariant, PriceVariant } from "@/types";
 
 const API_BASE = "https://api.pokemontcg.io/v2";
 const API_KEY = process.env.POKEMONTCG_API_KEY;
-const DISK_CACHE_PATH = path.join(process.cwd(), ".next", "pokemontcg-catalog.json");
 
-const CACHE_TTL_MS = 12 * 60 * 60 * 1000; // 12h cache for the full catalog
-let catalogPromise: Promise<CardSummary[]> | null = null;
-let catalogCache: { cards: CardSummary[]; fetchedAt: number } | null = null;
+const SEARCH_CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
+
+const searchCache = new Map<string, { results: CardSummary[]; fetchedAt: number }>();
+const cardCache = new Map<string, { card: CardSummary; fetchedAt: number }>();
 
 function addVariant(
   variants: Map<FinishVariant, PriceVariant>,
@@ -99,12 +96,9 @@ function mapCard(card: any, includePrices = false): CardSummary {
   } as CardSummary;
 }
 
-async function fetchJson(
-  url: string,
-  opts: { allow404Empty?: boolean; timeoutMs?: number } = {}
-) {
+async function fetchJson(url: string, opts: { allow404Empty?: boolean; timeoutMs?: number } = {}) {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), opts.timeoutMs ?? 8000);
+  const timeout = setTimeout(() => controller.abort(), opts.timeoutMs ?? 7000);
 
   try {
     const res = await fetch(url, {
@@ -143,143 +137,149 @@ async function fetchJsonWithRetry(url: string, opts: { allow404Empty?: boolean; 
     } catch (err) {
       lastError = err;
       if (attempt === retries) break;
-      await new Promise((resolve) => setTimeout(resolve, 500 * (attempt + 1)));
+      await new Promise((resolve) => setTimeout(resolve, 400 * (attempt + 1)));
     }
   }
   throw lastError;
 }
 
-async function readDiskCache(): Promise<{ cards: CardSummary[]; fetchedAt: number } | null> {
-  try {
-    const raw = await fs.readFile(DISK_CACHE_PATH, "utf8");
-    const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed.cards) && typeof parsed.fetchedAt === "number") {
-      return parsed as { cards: CardSummary[]; fetchedAt: number };
-    }
-  } catch (err) {
-    // Ignore missing cache or JSON issues
-  }
-  return null;
+function cacheKey(prefix: string, value: string) {
+  return `${prefix}:${value.trim().toLowerCase()}`;
 }
 
-async function writeDiskCache(cards: CardSummary[]) {
-  try {
-    await fs.mkdir(path.dirname(DISK_CACHE_PATH), { recursive: true });
-    await fs.writeFile(DISK_CACHE_PATH, JSON.stringify({ cards, fetchedAt: Date.now() }), "utf8");
-  } catch (err) {
-    // Non-fatal if disk cache cannot be written
+function readSearchCache(key: string) {
+  const entry = searchCache.get(key);
+  if (!entry) return null;
+  if (Date.now() - entry.fetchedAt > SEARCH_CACHE_TTL_MS) {
+    searchCache.delete(key);
+    return null;
   }
+  return entry.results;
 }
 
-async function fetchCatalog(): Promise<CardSummary[]> {
-  const pageSize = 250;
-  const selectFields = [
-    "id",
-    "name",
-    "number",
-    "rarity",
-    "set.name",
-    "set.id",
-    "set.series",
-    "set.printedTotal",
-    "images.small",
-    "images.large",
-    "tcgplayer",
-    "cardmarket",
-  ].join(",");
-
-  const results: CardSummary[] = [];
-  let page = 1;
-
-  while (true) {
-    const url = `${API_BASE}/cards?page=${page}&pageSize=${pageSize}&select=${encodeURIComponent(selectFields)}`;
-    const data = await fetchJsonWithRetry(url, { allow404Empty: true, timeoutMs: 7000 });
-    const cards = data?.data ?? [];
-    if (!cards.length) break;
-    results.push(...cards.map((card: any) => mapCard(card, true)));
-    if (cards.length < pageSize) break;
-    page += 1;
-  }
-
-  return results;
+function writeSearchCache(key: string, results: CardSummary[]) {
+  searchCache.set(key, { results, fetchedAt: Date.now() });
 }
 
-async function loadCatalog(force = false): Promise<CardSummary[]> {
-  const now = Date.now();
-  if (!catalogCache) {
-    const disk = await readDiskCache();
-    if (disk) {
-      catalogCache = disk;
-    }
+function readCardCache(id: string) {
+  const entry = cardCache.get(id);
+  if (!entry) return null;
+  if (Date.now() - entry.fetchedAt > SEARCH_CACHE_TTL_MS) {
+    cardCache.delete(id);
+    return null;
   }
+  return entry.card;
+}
 
-  if (!force && catalogCache && now - catalogCache.fetchedAt < CACHE_TTL_MS) {
-    return catalogCache.cards;
-  }
+function writeCardCache(card: CardSummary) {
+  cardCache.set(card.id, { card, fetchedAt: Date.now() });
+}
 
-  if (!force && catalogPromise) {
-    return catalogPromise;
-  }
+const selectFields = [
+  "id",
+  "name",
+  "number",
+  "rarity",
+  "set.name",
+  "set.id",
+  "set.series",
+  "set.printedTotal",
+  "images.small",
+  "images.large",
+  "tcgplayer",
+  "cardmarket",
+].join(",");
 
-  const promise = (async () => {
-    try {
-      const cards = await fetchCatalog();
-      catalogCache = { cards, fetchedAt: Date.now() };
-      await writeDiskCache(cards);
-      return cards;
-    } catch (err) {
-      if (catalogCache) {
-        return catalogCache.cards;
-      }
-      throw new Error("PokémonTCG catalog could not be fetched. Please retry in a moment.");
-    }
-  })();
-
-  catalogPromise = promise;
-  try {
-    return await promise;
-  } finally {
-    catalogPromise = null;
-  }
+async function searchApi(q: string, pageSize = 50): Promise<CardSummary[]> {
+  const url = `${API_BASE}/cards?q=${encodeURIComponent(q)}&select=${encodeURIComponent(selectFields)}&pageSize=${pageSize}`;
+  const data = await fetchJsonWithRetry(url, { allow404Empty: true });
+  const cards = data?.data ?? [];
+  return cards.map((c: any) => mapCard(c, true));
 }
 
 export async function searchCardsByName(query: string): Promise<CardSummary[]> {
   const sanitized = query.trim();
   if (!sanitized) return [];
+  const key = cacheKey("name", sanitized);
+  const cached = readSearchCache(key);
+  if (cached) return cached;
 
-  const catalog = await loadCatalog();
-  const needle = sanitized.toLowerCase();
-  const results = catalog.filter((card) => card.name.toLowerCase().includes(needle));
-  return results.slice(0, 100);
+  const escaped = sanitized.replace(/"/g, "\\\"");
+  const phraseQuery = `name:\"${escaped}\"`;
+  const fallbackQuery = `name:${escaped}`;
+
+  let results: CardSummary[] = [];
+  try {
+    results = await searchApi(phraseQuery);
+    if (!results.length) {
+      results = await searchApi(fallbackQuery);
+    }
+  } catch (err) {
+    const cachedResults = readSearchCache(key);
+    if (cachedResults) return cachedResults;
+    throw err;
+  }
+
+  writeSearchCache(key, results);
+  return results;
 }
 
 export async function searchCardsByNumberId(cardId: string): Promise<CardSummary[]> {
   const trimmed = cardId.trim();
   if (!trimmed) return [];
+  const key = cacheKey("number", trimmed);
+  const cached = readSearchCache(key);
+  if (cached) return cached;
 
-  const catalog = await loadCatalog();
   const parts = trimmed.split("/").map((p) => p.trim()).filter(Boolean);
   const number = parts[0];
   const total = parts[1];
 
-  let matches = catalog.filter((card) => card.number === number || card.number?.startsWith(number));
-  if (total) {
-    matches = matches.filter((card) => !card.printedTotal || String(card.printedTotal) === total);
+  const queries = [
+    total ? `number:${number} set.printedTotal:${total}` : `number:${number}`,
+    `number:\"${number}\"`,
+  ];
+
+  let results: CardSummary[] = [];
+  for (const q of queries) {
+    try {
+      results = await searchApi(q);
+      if (results.length) break;
+    } catch (err) {
+      // continue to next query
+    }
   }
 
-  // Prefer exact printedTotal matches first
-  matches.sort((a, b) => {
-    const aExact = total && a.printedTotal && String(a.printedTotal) === total ? 1 : 0;
-    const bExact = total && b.printedTotal && String(b.printedTotal) === total ? 1 : 0;
-    return bExact - aExact;
-  });
+  if (!results.length) {
+    const cachedResults = readSearchCache(key);
+    if (cachedResults) return cachedResults;
+    throw new Error("No cards found for that card ID.");
+  }
 
-  return matches.slice(0, 100);
+  // Prefer exact printedTotal matches first when available
+  if (total) {
+    results.sort((a, b) => {
+      const aExact = a.printedTotal && String(a.printedTotal) === total ? 1 : 0;
+      const bExact = b.printedTotal && String(b.printedTotal) === total ? 1 : 0;
+      return bExact - aExact;
+    });
+  }
+
+  writeSearchCache(key, results);
+  return results;
 }
 
 export async function getCardById(id: string): Promise<CardSummary | null> {
   if (!id) return null;
-  const catalog = await loadCatalog();
-  const found = catalog.find((card) => card.id === id);
-  return found ?? null;
+  const cached = readCardCache(id);
+  if (cached) return cached;
+
+  const url = `${API_BASE}/cards/${encodeURIComponent(id)}?select=${encodeURIComponent(selectFields)}`;
+  const data = await fetchJsonWithRetry(url, { allow404Empty: true });
+  const card = data?.data;
+  if (!card) return null;
+
+  const mapped = mapCard(card, true);
+  writeCardCache(mapped);
+  return mapped;
 }

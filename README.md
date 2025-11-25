@@ -26,7 +26,7 @@ npm run dev              # runs migrations again on startup to ensure tables exi
 
 The app will be available at `http://localhost:3000`. The `npm run dev` script now applies migrations before starting, so you won't see "table does not exist" errors even on a fresh checkout. If you do, manually rerun `npm run prisma:migrate` to recreate the `Card` and `CollectionEntry` tables in `dev.db`.
 
-The first search downloads and caches the full Pokémon TCG catalog (including embedded `tcgplayer`/`cardmarket` prices) so later name or ID lookups are instant and served from memory. If the upstream API blips, the app keeps serving the most recently cached catalog for 12 hours before trying to refresh again.
+Searches hit the PokémonTCG.io API on-demand with a short-lived in-memory cache for repeated queries. Results include embedded `tcgplayer`/`cardmarket` prices so no additional pricing requests are needed.
 
 ## Key features
 - **Dashboard** with unique card count, total quantity, and recent additions.
