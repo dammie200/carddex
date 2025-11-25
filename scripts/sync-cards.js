@@ -20,7 +20,8 @@ const MAX_PAGES = 200;
 
 const SAMPLE_PATH = path.join(__dirname, "../data/sample-cards.json");
 const CACHE_PATH = path.join(__dirname, "../data/catalog-cache.json");
-const ALLOW_SAMPLE_FALLBACK = process.env.ALLOW_SAMPLE_FALLBACK !== "0"; // default to true so we never error out offline
+// Default to disabling the tiny sample fallback unless explicitly opted in.
+const ALLOW_SAMPLE_FALLBACK = process.env.ALLOW_SAMPLE_FALLBACK === "1";
 
 function coalesce(...values) {
   for (const val of values) {
@@ -278,7 +279,7 @@ async function fetchCatalog() {
   }
 
   throw new Error(
-    "All catalog sources failed and sample fallback is disabled. Enable ALLOW_SAMPLE_FALLBACK=1 or provide network access to GitHub/PokémonTCG."
+    "All catalog sources failed and sample fallback is disabled by default. Enable ALLOW_SAMPLE_FALLBACK=1 or provide network access to GitHub/PokémonTCG."
   );
 }
 
