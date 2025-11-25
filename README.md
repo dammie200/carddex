@@ -17,14 +17,18 @@ DATABASE_URL="file:./dev.db"
 POKEMONTCG_API_KEY=your_pokemontcg_api_key
 ```
 
-3. Generate the Prisma client and run the dev server:
+3. Create the SQLite schema and generate the Prisma client:
 
 ```bash
+npm run prisma:migrate
 npm run prisma:generate
 npm run dev
 ```
 
 The app will be available at `http://localhost:3000`.
+
+If you encounter missing table errors (for example when the dashboard loads), ensure the migration step above has been executed t
+o create `Card` and `CollectionEntry` tables in `dev.db`.
 
 ## Key features
 - **Dashboard** with unique card count, total quantity, and recent additions.
