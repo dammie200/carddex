@@ -28,6 +28,7 @@ export interface CardSummary {
   imageSmallUrl: string;
   imageLargeUrl: string;
   tcgplayerProductId?: number | null;
+  price?: CardPriceData | null;
 }
 
 export interface PriceVariant {

@@ -1,10 +1,75 @@
-import { CardSummary } from "@/types";
+import { CardPriceData, CardSummary, FinishVariant, PriceVariant } from "@/types";
 
 const API_BASE = "https://api.pokemontcg.io/v2";
 const API_KEY = process.env.POKEMONTCG_API_KEY;
 
-function mapCard(card: any): CardSummary {
+function addVariant(
+  variants: Map<FinishVariant, PriceVariant>,
+  finish: FinishVariant,
+  value: Partial<PriceVariant>
+) {
+  if (!value.marketPrice && !value.lowPrice && !value.midPrice && !value.highPrice) return;
+  const existing = variants.get(finish) ?? { finish };
+  variants.set(finish, {
+    finish,
+    marketPrice: existing.marketPrice ?? value.marketPrice,
+    lowPrice: existing.lowPrice ?? value.lowPrice,
+    midPrice: existing.midPrice ?? value.midPrice,
+    highPrice: existing.highPrice ?? value.highPrice,
+  });
+}
+
+function mapPricesFromCard(card: any): CardPriceData | null {
+  const variants = new Map<FinishVariant, PriceVariant>();
+
+  const tcgPrices = card.tcgplayer?.prices;
+  if (tcgPrices) {
+    const mappings: [keyof typeof tcgPrices, FinishVariant][] = [
+      ["normal", "Normal"],
+      ["holofoil", "Holo"],
+      ["reverseHolofoil", "Reverse Holo"],
+      ["firstEditionHolofoil", "Holo"],
+      ["unlimitedHolofoil", "Holo"],
+      ["firstEdition", "Normal"],
+    ];
+    for (const [key, finish] of mappings) {
+      const p = tcgPrices[key];
+      if (!p) continue;
+      addVariant(variants, finish, {
+        marketPrice: p.market,
+        lowPrice: p.low,
+        midPrice: p.mid,
+        highPrice: p.high,
+      });
+    }
+  }
+
+  const cardmarket = card.cardmarket?.prices;
+  if (cardmarket) {
+    addVariant(variants, "Normal", {
+      marketPrice: cardmarket.trendPrice,
+      lowPrice: cardmarket.lowPrice,
+      midPrice: cardmarket.averageSellPrice,
+    });
+    addVariant(variants, "Reverse Holo", {
+      marketPrice: cardmarket.reverseHoloTrend,
+      lowPrice: cardmarket.reverseHoloLow,
+      midPrice: cardmarket.reverseHoloSell,
+    });
+  }
+
+  const variantList = Array.from(variants.values());
+  if (!variantList.length) return null;
+
   return {
+    productId: card.tcgplayer?.productId ?? undefined,
+    fetchedAt: new Date().toISOString(),
+    variants: variantList,
+  };
+}
+
+function mapCard(card: any, includePrices = false): CardSummary {
+  const base: CardSummary = {
     id: card.id,
     name: card.name,
     setName: card.set?.name ?? "",
@@ -17,6 +82,13 @@ function mapCard(card: any): CardSummary {
     imageLargeUrl: card.images?.large ?? "",
     tcgplayerProductId: card.tcgplayer?.productId ?? null,
   };
+
+  if (!includePrices) return base;
+
+  return {
+    ...base,
+    price: mapPricesFromCard(card),
+  } as CardSummary;
 }
 
 async function fetchJson(url: string) {
@@ -37,7 +109,7 @@ export async function searchCardsByName(query: string): Promise<CardSummary[]> {
   if (!query) return [];
   const url = `${API_BASE}/cards?q=name:${encodeURIComponent(query)}`;
   const data = await fetchJson(url);
-  return (data.data || []).map(mapCard);
+  return (data.data || []).map((card: any) => mapCard(card));
 }
 
 export async function searchCardsByNumberId(cardId: string): Promise<CardSummary[]> {
@@ -52,12 +124,12 @@ export async function searchCardsByNumberId(cardId: string): Promise<CardSummary
   }
   const url = `${API_BASE}/cards?q=${encodeURIComponent(queryParts.join(" "))}`;
   const data = await fetchJson(url);
-  return (data.data || []).map(mapCard);
+  return (data.data || []).map((card: any) => mapCard(card));
 }
 
 export async function getCardById(id: string): Promise<CardSummary | null> {
   const url = `${API_BASE}/cards/${id}`;
   const data = await fetchJson(url);
   if (!data?.data) return null;
-  return mapCard(data.data);
+  return mapCard(data.data, true);
 }

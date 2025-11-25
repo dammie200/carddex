@@ -15,8 +15,6 @@ npm install
 ```
 DATABASE_URL="file:./dev.db"
 POKEMONTCG_API_KEY=your_pokemontcg_api_key
-TCGPLAYER_PUBLIC_KEY=your_tcgplayer_public_key
-TCGPLAYER_PRIVATE_KEY=your_tcgplayer_private_key
 ```
 
 3. Generate the Prisma client and run the dev server:
@@ -32,11 +30,10 @@ The app will be available at `http://localhost:3000`.
 - **Dashboard** with unique card count, total quantity, and recent additions.
 - **Search & Add** cards by name or by printed card ID (`number/total` like `158/236`), then add them to your collection with condition, language, finish/variant, notes, and purchase price.
 - **My Collection** table with filters for finish and condition plus quick search.
-- **Card details** page with large imagery and market pricing from TCGPlayer when a productId is available.
+- **Card details** page with large imagery and market pricing using the `tcgplayer` and `cardmarket` price data returned by PokémonTCG.io.
 
 ## API integrations
-- **PokémonTCG.io v2**: search by name or number/printedTotal using the provided API key header `X-Api-Key` when present.
-- **TCGPlayer pricing**: server-side helper exchanges OAuth2 client credentials for a bearer token, caches it until expiry, and fetches per-variant prices.
+- **PokémonTCG.io v2**: search by name or number/printedTotal using the provided API key header `X-Api-Key` when present. Pricing is pulled directly from the `tcgplayer` and `cardmarket` fields in the PokémonTCG.io responses, so no extra keys are required.
 
 ## Database schema
 Prisma models live in `prisma/schema.prisma`:

@@ -1,6 +1,5 @@
 import Image from "next/image";
 import { getCardById } from "@/lib/pokemontcg";
-import { fetchPrices } from "@/lib/tcgplayer";
 import { AddToCollectionForm } from "@/components/AddToCollectionForm";
 
 interface Props {
@@ -10,7 +9,6 @@ interface Props {
 export default async function CardDetailPage({ params }: Props) {
   const card = await getCardById(params.id);
   if (!card) return <div className="text-slate-300">Card not found.</div>;
-  const price = await fetchPrices(card.tcgplayerProductId ?? undefined);
 
   return (
     <div className="grid gap-6 lg:grid-cols-3">
@@ -31,10 +29,10 @@ export default async function CardDetailPage({ params }: Props) {
       <div className="space-y-4 lg:col-span-2">
         <div className="rounded-lg border border-slate-800 bg-slate-900/70 p-4">
           <div className="text-lg font-semibold">Market pricing</div>
-          {!price && <div className="text-sm text-slate-400">No price data.</div>}
-          {price && (
+          {!card.price && <div className="text-sm text-slate-400">No price data.</div>}
+          {card.price && (
             <div className="mt-3 grid gap-2 md:grid-cols-2">
-              {price.variants.map((variant, idx) => (
+              {card.price.variants.map((variant, idx) => (
                 <div key={idx} className="rounded border border-slate-800 bg-slate-950/60 p-3">
                   <div className="text-sm font-semibold text-amber-100">{variant.finish}</div>
                   <div className="text-xs text-slate-400">Market: {variant.marketPrice ? `$${variant.marketPrice.toFixed(2)}` : "-"}</div>
