@@ -97,7 +97,7 @@ async function fetchJson(url: string, opts: { allow404Empty?: boolean } = {}) {
       "Content-Type": "application/json",
       ...(API_KEY ? { "X-Api-Key": API_KEY } : {}),
     },
-    next: { revalidate: 60 },
+    cache: "no-store",
   });
 
   if (res.status === 404 && opts.allow404Empty) {
@@ -112,7 +112,8 @@ async function fetchJson(url: string, opts: { allow404Empty?: boolean } = {}) {
 
 export async function searchCardsByName(query: string): Promise<CardSummary[]> {
   if (!query) return [];
-  const url = `${API_BASE}/cards?q=name:${encodeURIComponent(query)}`;
+  const sanitized = query.trim();
+  const url = `${API_BASE}/cards?q=name:${encodeURIComponent(sanitized)}*`;
   const data = await fetchJson(url, { allow404Empty: true });
   return (data.data || []).map((card: any) => mapCard(card));
 }

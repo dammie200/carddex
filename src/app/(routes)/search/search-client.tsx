@@ -77,7 +77,9 @@ export function SearchClient() {
         {error && <div className="mt-3 text-sm text-rose-300">{error}</div>}
         <div className="mt-4 grid gap-3 md:grid-cols-2 lg:grid-cols-3">
           {loading && <div className="text-slate-300">Loading...</div>}
-          {!loading && results.length === 0 && <div className="text-slate-400">No results yet.</div>}
+          {!loading && !error && results.length === 0 && (
+            <div className="text-slate-400">No results yet.</div>
+          )}
           {results.map((card) => (
             <CardResult key={card.id} card={card} onSelect={(c) => setSelected(c)} />
           ))}
