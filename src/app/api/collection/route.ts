@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { CardSummary, FinishVariant, CardCondition } from "@/types";
-import { getCardById } from "@/lib/pokemontcg";
+import { CardSummary, FinishVariant, CardCondition, CardPriceData } from "@/types";
+import { mapCardToDb } from "@/lib/cardStore";
 
 function mapFinishToDb(finish: FinishVariant) {
   return finish;
@@ -17,41 +17,19 @@ export async function GET() {
     orderBy: { createdAt: "desc" },
   });
 
-  const withPrices = await Promise.all(
-    entries.map(async (entry) => {
-      let remoteCard: CardSummary | null = null;
-      try {
-        remoteCard = await getCardById(entry.cardId);
-      } catch (err) {
-        console.error("Failed to fetch card price", err);
-      }
-      return {
-        ...entry,
-        price: remoteCard?.price ?? null,
-      };
-    })
-  );
+  const mapped = entries.map((entry) => ({
+    ...entry,
+    price: (entry.card.priceJson as CardPriceData | null) ?? null,
+  }));
 
-  return NextResponse.json({ entries: withPrices });
+  return NextResponse.json({ entries: mapped });
 }
 
 export async function POST(request: Request) {
   const body = await request.json();
   const card: CardSummary | undefined = body.card;
   if (!card) return NextResponse.json({ error: "Missing card" }, { status: 400 });
-  const data = {
-    id: card.id,
-    name: card.name,
-    setId: card.setId,
-    setName: card.setName,
-    setSeries: card.setSeries ?? undefined,
-    printedTotal: card.printedTotal ?? undefined,
-    number: card.number,
-    rarity: card.rarity ?? undefined,
-    imageSmallUrl: card.imageSmallUrl,
-    imageLargeUrl: card.imageLargeUrl,
-    tcgplayerProductId: card.tcgplayerProductId ?? undefined,
-  };
+  const data = mapCardToDb(card);
   await prisma.card.upsert({
     where: { id: card.id },
     update: data,

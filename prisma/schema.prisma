@@ -22,7 +22,12 @@ model Card {
   imageSmallUrl      String
   imageLargeUrl      String
   tcgplayerProductId Int?
+  priceJson          Json?
+
   collectionEntries  CollectionEntry[]
+
+  @@index([name])
+  @@index([number])
 }
 
 model CollectionEntry {

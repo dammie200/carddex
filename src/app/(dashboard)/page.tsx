@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import Link from "next/link";
-import { getCardById } from "@/lib/pokemontcg";
+import { CardPriceData } from "@/types";
 
 type DashboardStats = {
   totalQuantity: number;
@@ -22,15 +22,13 @@ async function getStats(): Promise<DashboardStats> {
       prisma.collectionEntry.findMany({ include: { card: true }, orderBy: { createdAt: "desc" }, take: 5 }),
     ]);
 
-    const prices = await Promise.all(
-      entries.map(async (entry) => {
-        const remote = await getCardById(entry.cardId);
-        const variants = remote?.price?.variants ?? [];
-        const match = variants.find((v) => normalizedFinish(v.finish) === normalizedFinish(entry.finish));
-        const variant = match ?? variants[0];
-        return variant?.marketPrice ? variant.marketPrice * entry.quantity : 0;
-      })
-    );
+    const prices = entries.map((entry) => {
+      const price = entry.card.priceJson as CardPriceData | null;
+      const variants = price?.variants ?? [];
+      const match = variants.find((v) => normalizedFinish(v.finish) === normalizedFinish(entry.finish));
+      const variant = match ?? variants[0];
+      return variant?.marketPrice ? variant.marketPrice * entry.quantity : 0;
+    });
 
     const estimatedValue = prices.reduce((acc, val) => acc + val, 0);
     return {
