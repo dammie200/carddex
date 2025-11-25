@@ -35,7 +35,7 @@ npm run dev
 The app will be available at `http://localhost:3000`. The `npm run dev` script applies migrations before starting to avoid missing-table errors.
 
 ## How pricing works now
-- Prices come from the `tcgplayer` and `cardmarket` fields included in the catalog data (sourced from the public PokémonTCG GitHub dataset, the PokémonTCG.io API fallback, or the bundled sample) during the catalog sync.
+- Prices come from the `tcgplayer` and `cardmarket` fields included in the catalog data (sourced from the public PokémonTCG GitHub dataset, the PokémonTCG.io API fallback, or the bundled sample) during the catalog sync. When no upstream pricing exists, the sync fills in deterministic, rarity-based estimates so every card still has a value for collection totals.
 - No direct TCGplayer API calls are made at runtime; searches and pricing are purely local once the catalog is synced.
 - Manual price refreshes now rely entirely on stored catalog data—no remote calls are made. Refreshing simply reuses the latest saved price information and marks it as fresh.
 
