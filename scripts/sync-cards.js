@@ -27,10 +27,14 @@ function loadLocalDataset() {
       console.log(`Loaded local pokemon-tcg-data package (${cards.length} cards).`);
       return cards;
     }
+    throw new Error("pokemon-tcg-data returned no cards");
   } catch (err) {
-    console.warn("Local pokemon-tcg-data package not available:", err.message);
+    const message =
+      err.code === "MODULE_NOT_FOUND"
+        ? "pokemon-tcg-data is missing. Run `npm install` to download the full catalog dependency before syncing."
+        : `Unable to read pokemon-tcg-data: ${err.message}`;
+    throw new Error(message);
   }
-  return null;
 }
 
 function coalesce(...values) {
@@ -212,8 +216,17 @@ async function fetchPage(page) {
 }
 
 async function fetchCatalog() {
-  const local = loadLocalDataset();
-  if (local) return local;
+  try {
+    return loadLocalDataset();
+  } catch (err) {
+    console.error(err.message);
+    if (!process.env.ALLOW_SAMPLE_FALLBACK) {
+      throw new Error(
+        "Full catalog missing. Install dependencies to get pokemon-tcg-data or set ALLOW_SAMPLE_FALLBACK=1 to use the tiny sample dataset."
+      );
+    }
+    console.warn("ALLOW_SAMPLE_FALLBACK enabled; continuing with limited sample data.");
+  }
 
   try {
     console.log("Fetching catalog from GitHub dataset...");
