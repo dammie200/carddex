@@ -21,10 +21,10 @@ POKEMONTCG_API_KEY=your_pokemontcg_api_key
 ```bash
 npm run prisma:migrate   # apply the checked-in migration to dev.db
 npm run prisma:generate  # optional; dev server will also generate the client when needed
-npm run sync:cards       # pulls the public PokémonTCG catalog (or a bundled sample) into SQLite for fast local searches
+    npm run sync:cards       # pulls the full PokémonTCG catalog (via the bundled npm dataset) into SQLite for fast local searches
 ```
 
-The sync script tries the public PokémonTCG GitHub dataset first, then the PokémonTCG paginated API, and finally a bundled sample set so the command succeeds even when external downloads fail. Syncing is non-destructive: it upserts cards and preserves any existing collection entries referencing them. You can re-run `npm run sync:cards` anytime to refresh cards and price data.
+The sync script now loads the full catalog directly from the `pokemon-tcg-data` npm package (installed alongside dependencies), then falls back to the public PokémonTCG GitHub dataset, the PokémonTCG paginated API, and finally a bundled sample set so the command succeeds even when external downloads fail. Syncing is non-destructive: it upserts cards and preserves any existing collection entries referencing them. You can re-run `npm run sync:cards` anytime to refresh cards and price data.
 
 4. Start the dev server:
 

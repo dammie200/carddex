@@ -18,6 +18,21 @@ const MAX_PAGES = 200;
 
 const SAMPLE_PATH = path.join(__dirname, "../data/sample-cards.json");
 
+function loadLocalDataset() {
+  try {
+    // The pokemon-tcg-data package bundles the full catalog so we can seed without relying on network calls.
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const cards = require("pokemon-tcg-data/json/cards/en.json");
+    if (Array.isArray(cards) && cards.length) {
+      console.log(`Loaded local pokemon-tcg-data package (${cards.length} cards).`);
+      return cards;
+    }
+  } catch (err) {
+    console.warn("Local pokemon-tcg-data package not available:", err.message);
+  }
+  return null;
+}
+
 function coalesce(...values) {
   for (const val of values) {
     if (val !== undefined && val !== null) return val;
@@ -197,6 +212,9 @@ async function fetchPage(page) {
 }
 
 async function fetchCatalog() {
+  const local = loadLocalDataset();
+  if (local) return local;
+
   try {
     console.log("Fetching catalog from GitHub dataset...");
     const data = await fetchFromGithub();
