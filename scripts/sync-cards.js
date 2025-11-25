@@ -184,7 +184,16 @@ async function fetchFromGithub() {
     const cards = await cardsRes.json();
     const count = Array.isArray(cards) ? cards.length : 0;
     if (count) {
-      allCards.push(...cards);
+      const enriched = cards.map((card) => ({
+        ...card,
+        set: card.set ?? set,
+        // ensure printedTotal is populated so IDs render as number/total in the UI
+        printedTotal: coalesce(card.printedTotal, set.printedTotal, set.total, card.total, null),
+        setId: card.setId ?? set.id,
+        setName: card.setName ?? set.name,
+        setSeries: card.setSeries ?? set.series,
+      }));
+      allCards.push(...enriched);
     }
     console.log(`Fetched set ${set.id} (${count} cards)`);
   }
