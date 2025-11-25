@@ -1,5 +1,17 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import type { CardPriceData } from "@/types";
+
+function parsePrice(priceJson: string | null): CardPriceData | null {
+  if (!priceJson) return null;
+  try {
+    const parsed = JSON.parse(priceJson);
+    if (!parsed || typeof parsed !== "object") return null;
+    return parsed as CardPriceData;
+  } catch {
+    return null;
+  }
+}
 
 export async function PUT(
   request: Request,
@@ -17,8 +29,9 @@ export async function PUT(
       purchasePrice: body.purchasePrice,
       notes: body.notes,
     },
+    include: { card: true },
   });
-  return NextResponse.json({ entry });
+  return NextResponse.json({ entry: { ...entry, price: parsePrice(entry.card.priceJson) } });
 }
 
 export async function DELETE(
