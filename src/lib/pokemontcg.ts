@@ -10,8 +10,9 @@ import { prisma } from "./prisma";
 
 const POKEMONTCG_API = "https://api.pokemontcg.io/v2";
 const API_KEY = process.env.POKEMONTCG_API_KEY;
+const PRICE_CACHE_MAX_AGE_MS = 12 * 60 * 60 * 1000; // 12 hours
 
-async function fetchWithTimeout(url: string, init: RequestInit = {}, timeoutMs = 8000) {
+async function fetchWithTimeout(url: string, init: RequestInit = {}, timeoutMs = 10000) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -43,6 +44,13 @@ function parseStoredPrice(priceJson: string | null): CardPriceData | null {
   } catch (err) {
     return null;
   }
+}
+
+function priceIsFresh(price: CardPriceData | null) {
+  if (!price?.fetchedAt) return false;
+  const fetched = Date.parse(price.fetchedAt);
+  if (Number.isNaN(fetched)) return false;
+  return Date.now() - fetched < PRICE_CACHE_MAX_AGE_MS;
 }
 
 function mapPricesFromApi(card: any): CardPriceData | null {
@@ -111,38 +119,49 @@ export async function ensureCatalogSeeded() {
 export async function refreshCardPrice(cardId: string): Promise<CardPriceData | null> {
   const existing = await prisma.card.findUnique({ where: { id: cardId }, select: { priceJson: true } });
   const existingPrice = parseStoredPrice(existing?.priceJson ?? null);
-  try {
-    const json = await fetchWithTimeout(`${POKEMONTCG_API}/cards/${cardId}`);
-    const card = json?.data;
-    if (!card) return null;
-    const mappedPrice = mapPricesFromApi(card);
-    if (mappedPrice) {
-      const { id: _ignoredId, priceJson: _ignoredPrice, ...rest } = mapCardToDb({
-        id: card.id,
-        name: card.name,
-        setId: card.set.id,
-        setName: card.set.name,
-        setSeries: card.set.series,
-        printedTotal: card.set.printedTotal,
-        number: card.number,
-        rarity: card.rarity,
-        imageSmallUrl: card.images?.small,
-        imageLargeUrl: card.images?.large,
-        tcgplayerProductId: card?.tcgplayer?.productId,
-        price: mappedPrice,
-      });
-      await prisma.card.update({
-        where: { id: cardId },
-        data: { priceJson: JSON.stringify(mappedPrice), ...rest },
-      });
-    }
-    return mappedPrice;
-  } catch (err) {
-    if (existingPrice) {
-      console.warn(`Using stored price for ${cardId} after refresh error:`, err instanceof Error ? err.message : err);
-      return existingPrice;
-    }
-    console.error(`Failed to refresh price for ${cardId}:`, err);
-    return null;
+  if (priceIsFresh(existingPrice)) {
+    return existingPrice;
   }
+
+  let lastError: unknown;
+  const timeouts = [10000, 14000];
+  for (const timeout of timeouts) {
+    try {
+      const json = await fetchWithTimeout(`${POKEMONTCG_API}/cards/${cardId}`, {}, timeout);
+      const card = json?.data;
+      if (!card) return existingPrice ?? null;
+      const mappedPrice = mapPricesFromApi(card);
+      if (mappedPrice) {
+        const { id: _ignoredId, priceJson: _ignoredPrice, ...rest } = mapCardToDb({
+          id: card.id,
+          name: card.name,
+          setId: card.set.id,
+          setName: card.set.name,
+          setSeries: card.set.series,
+          printedTotal: card.set.printedTotal,
+          number: card.number,
+          rarity: card.rarity,
+          imageSmallUrl: card.images?.small,
+          imageLargeUrl: card.images?.large,
+          tcgplayerProductId: card?.tcgplayer?.productId,
+          price: mappedPrice,
+        });
+        await prisma.card.update({
+          where: { id: cardId },
+          data: { priceJson: JSON.stringify(mappedPrice), ...rest },
+        });
+      }
+      return mappedPrice ?? existingPrice ?? null;
+    } catch (err) {
+      lastError = err;
+    }
+  }
+
+  if (existingPrice) {
+    console.warn(`Using stored price for ${cardId} after refresh error:`, lastError instanceof Error ? lastError.message : lastError);
+    return existingPrice;
+  }
+
+  console.error(`Failed to refresh price for ${cardId}:`, lastError);
+  return null;
 }

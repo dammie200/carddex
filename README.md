@@ -37,6 +37,7 @@ The app will be available at `http://localhost:3000`. The `npm run dev` script a
 ## How pricing works now
 - Prices come from the `tcgplayer` and `cardmarket` fields included in the catalog data (sourced from the public PokémonTCG GitHub dataset, the PokémonTCG.io API fallback, or the bundled sample) during the catalog sync.
 - No direct TCGplayer API calls are made at runtime; searches and pricing are purely local once the catalog is synced.
+- Manual price refreshes reuse any stored price data that is less than 12 hours old and attempt a short retry before falling back to cached values when the upstream API is slow.
 
 ## Key features
 - **Dashboard** with unique card count, total quantity, estimated collection value, and recent additions.
