@@ -1,0 +1,65 @@
+[
+  {
+    "id": "swsh12pt5-15",
+    "name": "Charizard",
+    "setId": "swsh12pt5",
+    "setName": "Crown Zenith",
+    "setSeries": "Sword & Shield",
+    "printedTotal": 160,
+    "number": "15",
+    "rarity": "Rare Holo V",
+    "imageSmallUrl": "https://images.pokemontcg.io/swsh12pt5/15.png",
+    "imageLargeUrl": "https://images.pokemontcg.io/swsh12pt5/15_hires.png",
+    "tcgplayerProductId": 283968,
+    "price": {
+      "productId": 283968,
+      "fetchedAt": "2024-01-01T00:00:00.000Z",
+      "variants": [
+        { "finish": "Normal", "marketPrice": 12.5, "lowPrice": 10.0, "midPrice": 13.0, "highPrice": 16.0 },
+        { "finish": "Holo", "marketPrice": 15.0, "lowPrice": 12.0, "midPrice": 15.0, "highPrice": 19.0 }
+      ]
+    }
+  },
+  {
+    "id": "swsh3-20",
+    "name": "Butterfree VMAX",
+    "setId": "swsh3",
+    "setName": "Darkness Ablaze",
+    "setSeries": "Sword & Shield",
+    "printedTotal": 201,
+    "number": "20",
+    "rarity": "Rare Ultra",
+    "imageSmallUrl": "https://images.pokemontcg.io/swsh3/20.png",
+    "imageLargeUrl": "https://images.pokemontcg.io/swsh3/20_hires.png",
+    "tcgplayerProductId": 221114,
+    "price": {
+      "productId": 221114,
+      "fetchedAt": "2024-01-01T00:00:00.000Z",
+      "variants": [
+        { "finish": "Normal", "marketPrice": 6.75, "lowPrice": 5.5, "midPrice": 6.5, "highPrice": 8.0 },
+        { "finish": "Holo", "marketPrice": 7.25, "lowPrice": 6.0, "midPrice": 7.0, "highPrice": 9.0 }
+      ]
+    }
+  },
+  {
+    "id": "sv1-12",
+    "name": "Tropius",
+    "setId": "sv1",
+    "setName": "Scarlet & Violet",
+    "setSeries": "Scarlet & Violet",
+    "printedTotal": 198,
+    "number": "12",
+    "rarity": "Common",
+    "imageSmallUrl": "https://images.pokemontcg.io/sv1/12.png",
+    "imageLargeUrl": "https://images.pokemontcg.io/sv1/12_hires.png",
+    "tcgplayerProductId": 451219,
+    "price": {
+      "productId": 451219,
+      "fetchedAt": "2024-01-01T00:00:00.000Z",
+      "variants": [
+        { "finish": "Normal", "marketPrice": 0.15, "lowPrice": 0.05, "midPrice": 0.2, "highPrice": 0.35 },
+        { "finish": "Reverse Holo", "marketPrice": 0.6, "lowPrice": 0.35, "midPrice": 0.6, "highPrice": 1.0 }
+      ]
+    }
+  }
+]

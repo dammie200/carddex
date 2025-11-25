@@ -1,0 +1,76 @@
+// Prisma schema for CardDex Pokémon TCG tracker
+// Run `npm run prisma:generate` to create the Prisma client once dependencies are installed.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+model Card {
+  id                 String   @id
+  name               String
+  setId              String
+  setName            String
+  setSeries          String?
+  printedTotal       Int?
+  number             String
+  rarity             String?
+  imageSmallUrl      String
+  imageLargeUrl      String
+  tcgplayerProductId Int?
+  priceJson          String?
+
+  collectionEntries  CollectionEntry[]
+
+  @@index([name])
+  @@index([number])
+}
+
+model CollectionEntry {
+  id            Int       @id @default(autoincrement())
+  cardId        String
+  card          Card      @relation(fields: [cardId], references: [id])
+  quantity      Int       @default(1)
+  condition     String    @default("Near Mint")
+  language      String    @default("EN")
+  finish        String    @default("Normal")
+  purchasePrice Float?
+  notes         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  binderSlots   BinderSlot[]
+}
+
+model Binder {
+  id        Int      @id @default(autoincrement())
+  name      String
+  layout    String   @default("grid")
+  gridRows  Int?     @default(3)
+  gridCols  Int?     @default(3)
+  pages     Int?     @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  slots     BinderSlot[]
+}
+
+model BinderSlot {
+  id                Int              @id @default(autoincrement())
+  binderId          Int
+  collectionEntryId Int
+  page              Int              @default(1)
+  position          Int?
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  binder            Binder           @relation(fields: [binderId], references: [id])
+  collectionEntry   CollectionEntry  @relation(fields: [collectionEntryId], references: [id])
+
+  @@unique([binderId, page, position])
+  @@index([collectionEntryId])
+}
