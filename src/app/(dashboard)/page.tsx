@@ -31,10 +31,11 @@ function parsePrice(priceJson: string | null): CardPriceData | null {
 
 async function getStats(): Promise<DashboardStats> {
   try {
-    const [totalEntries, uniqueCardIds, entries, binders] = await Promise.all([
+    const [totalEntries, uniqueCardIds, allEntries, recent, binders] = await Promise.all([
       prisma.collectionEntry.aggregate({ _sum: { quantity: true } }),
       prisma.collectionEntry.findMany({ distinct: ["cardId"], select: { cardId: true } }),
-      prisma.collectionEntry.findMany({ include: { card: true }, orderBy: { createdAt: "desc" }, take: 5 }),
+      prisma.collectionEntry.findMany({ include: { card: true } }),
+      prisma.collectionEntry.findMany({ include: { card: true }, orderBy: { createdAt: "desc" }, take: 10 }),
       prisma.binder.findMany({
         include: {
           slots: {
@@ -48,7 +49,7 @@ async function getStats(): Promise<DashboardStats> {
       }),
     ]);
 
-    const prices = entries.map((entry) => {
+    const prices = allEntries.map((entry) => {
       const price = parsePrice(entry.card.priceJson);
       const variants = price?.variants ?? [];
       const match = variants.find((v) => normalizedFinish(v.finish) === normalizedFinish(entry.finish));
@@ -58,7 +59,7 @@ async function getStats(): Promise<DashboardStats> {
 
     const estimatedValue = prices.reduce((acc, val) => acc + val, 0);
 
-    const mostValuable = entries.reduce<{ name: string; value: number; finish: string; set: string } | null>(
+    const mostValuable = allEntries.reduce<{ name: string; value: number; finish: string; set: string } | null>(
       (best, entry) => {
         const price = parsePrice(entry.card.priceJson);
         const variants = price?.variants ?? [];
@@ -73,7 +74,7 @@ async function getStats(): Promise<DashboardStats> {
       null
     );
 
-    const finishCounts = entries.reduce<Record<string, number>>((acc, entry) => {
+    const finishCounts = allEntries.reduce<Record<string, number>>((acc, entry) => {
       acc[entry.finish] = (acc[entry.finish] ?? 0) + 1;
       return acc;
     }, {});
@@ -102,7 +103,7 @@ async function getStats(): Promise<DashboardStats> {
       binderValue,
       mostValuable,
       topFinish,
-      recent: entries,
+      recent,
     };
   } catch (error) {
     console.error("Failed to load dashboard stats. Ensure database migrations have been applied.", error);

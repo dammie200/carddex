@@ -24,7 +24,7 @@ const conditions: CardCondition[] = [
   "Damaged",
 ];
 
-type SortKey = "name" | "series" | "number" | "quantity" | "condition" | "finish" | "value";
+type SortKey = "name" | "series" | "set" | "number" | "quantity" | "condition" | "finish" | "value";
 
 type SortState = { key: SortKey; direction: "asc" | "desc" };
 
@@ -47,6 +47,7 @@ export function CollectionClient() {
   const [finishFilter, setFinishFilter] = useState<string>("all");
   const [conditionFilter, setConditionFilter] = useState<string>("all");
   const [seriesFilter, setSeriesFilter] = useState<string>("all");
+  const [setFilter, setSetFilter] = useState<string>("all");
   const [selectedEntry, setSelectedEntry] = useState<CollectionEntryDTO | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -140,6 +141,14 @@ export function CollectionClient() {
     return Array.from(values).sort((a, b) => a.localeCompare(b));
   }, [entries]);
 
+  const setOptions = useMemo(() => {
+    const values = new Set<string>();
+    entries.forEach((e) => {
+      if (e.card.setName) values.add(e.card.setName);
+    });
+    return Array.from(values).sort((a, b) => a.localeCompare(b));
+  }, [entries]);
+
   const filtered = useMemo(() => {
     return entries.filter((entry) => {
       const matchesQuery = entry.card.name.toLowerCase().includes(query.toLowerCase());
@@ -148,9 +157,10 @@ export function CollectionClient() {
         conditionFilter === "all" || entry.condition.toLowerCase() === conditionFilter.toLowerCase().replace(" ", "");
       const matchesSeries =
         seriesFilter === "all" || (entry.card.setSeries || entry.card.setName || "").toLowerCase() === seriesFilter.toLowerCase();
-      return matchesQuery && matchesFinish && matchesCondition && matchesSeries;
+      const matchesSet = setFilter === "all" || (entry.card.setName || "").toLowerCase() === setFilter.toLowerCase();
+      return matchesQuery && matchesFinish && matchesCondition && matchesSeries && matchesSet;
     });
-  }, [entries, query, finishFilter, conditionFilter, seriesFilter]);
+  }, [entries, query, finishFilter, conditionFilter, seriesFilter, setFilter]);
 
   const sortedEntries = useMemo(() => {
     const copy = [...filtered];
@@ -164,6 +174,8 @@ export function CollectionClient() {
             return (a.card.setSeries || a.card.setName || "").toLowerCase();
           case "number":
             return `${a.card.number}/${a.card.printedTotal ?? ""}`;
+          case "set":
+            return (a.card.setName || "").toLowerCase();
           case "quantity":
             return a.quantity;
           case "condition":
@@ -184,6 +196,8 @@ export function CollectionClient() {
             return (b.card.setSeries || b.card.setName || "").toLowerCase();
           case "number":
             return `${b.card.number}/${b.card.printedTotal ?? ""}`;
+          case "set":
+            return (b.card.setName || "").toLowerCase();
           case "quantity":
             return b.quantity;
           case "condition":
@@ -280,6 +294,18 @@ export function CollectionClient() {
               </option>
             ))}
           </select>
+          <select
+            value={setFilter}
+            onChange={(e) => setSetFilter(e.target.value)}
+            className="rounded border border-slate-700 bg-slate-950/60 p-2 text-white"
+          >
+            <option value="all">All sets</option>
+            {setOptions.map((s) => (
+              <option key={s} value={s}>
+                {s}
+              </option>
+            ))}
+          </select>
           <div className="flex overflow-hidden rounded border border-slate-700">
             <button
               onClick={() => setViewMode("table")}
@@ -319,6 +345,11 @@ export function CollectionClient() {
                 <th className="px-3 py-2 text-left font-semibold">
                   <button onClick={() => toggleSort("series")} className="flex items-center gap-1">
                     Series {sortLabel("series")}
+                  </button>
+                </th>
+                <th className="px-3 py-2 text-left font-semibold">
+                  <button onClick={() => toggleSort("set")} className="flex items-center gap-1">
+                    Set {sortLabel("set")}
                   </button>
                 </th>
                 <th className="px-3 py-2 text-left font-semibold">
@@ -371,6 +402,7 @@ export function CollectionClient() {
                     </button>
                   </td>
                   <td className="px-3 py-3 text-slate-200">{entry.card.setSeries || entry.card.setName}</td>
+                  <td className="px-3 py-3 text-slate-200">{entry.card.setName || "--"}</td>
                   <td className="px-3 py-3 text-slate-200">
                     #{entry.card.number}
                     {entry.card.printedTotal ? `/${entry.card.printedTotal}` : ""}

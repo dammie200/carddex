@@ -17,20 +17,28 @@ export function SearchClient() {
   const [nameQuery, setNameQuery] = useState("");
   const [numberQuery, setNumberQuery] = useState("");
   const [seriesQuery, setSeriesQuery] = useState("");
+  const [setQuery, setSetQuery] = useState("");
   const [results, setResults] = useState<CardSummary[]>([]);
   const [loading, setLoading] = useState(false);
   const [selected, setSelected] = useState<CardSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [hasSearched, setHasSearched] = useState(false);
 
-  async function search(type: "name" | "number" | "series") {
+  async function search(type: "name" | "number" | "series" | "set") {
     setLoading(true);
     setError(null);
     setHasSearched(true);
     try {
-      const q = type === "name" ? nameQuery : type === "series" ? seriesQuery : numberQuery;
+      const q =
+        type === "name"
+          ? nameQuery
+          : type === "series"
+            ? seriesQuery
+            : type === "set"
+              ? setQuery
+              : numberQuery;
       const res = await fetch(
-        `/api/search/${type === "name" ? "name" : type === "series" ? "series" : "number"}?${
+        `/api/search/${type === "name" ? "name" : type === "series" ? "series" : type === "set" ? "set" : "number"}?${
           type === "number" ? `id=${encodeURIComponent(q)}` : `q=${encodeURIComponent(q)}`
         }`
       );
@@ -43,7 +51,9 @@ export function SearchClient() {
             ? `Geen kaarten gevonden voor "${q.trim()}".`
             : type === "series"
               ? `Geen kaarten gevonden in serie "${q.trim()}".`
-              : "Geen kaarten gevonden met dit kaartnummer."
+              : type === "set"
+                ? `Geen kaarten gevonden in set "${q.trim()}".`
+                : "Geen kaarten gevonden met dit kaartnummer."
         );
         return;
       }
@@ -123,6 +133,26 @@ export function SearchClient() {
               className="rounded bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-white"
             >
               Search series
+            </button>
+          </div>
+        </div>
+        <div className="mt-3 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div className="space-y-1">
+            <div className="text-sm font-semibold">Search by set</div>
+            <p className="text-xs text-slate-400">Vind kaarten binnen een specifieke set.</p>
+          </div>
+          <div className="flex gap-2">
+            <input
+              value={setQuery}
+              onChange={(e) => setSetQuery(e.target.value)}
+              placeholder="Cosmic Eclipse, Base Set..."
+              className="w-64 rounded border border-slate-700 bg-slate-950/60 p-2 text-white"
+            />
+            <button
+              onClick={() => search("set")}
+              className="rounded bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-white"
+            >
+              Search set
             </button>
           </div>
         </div>

@@ -3,6 +3,7 @@ import {
   findCardsByName,
   findCardsByNumber,
   findCardsBySeries,
+  findCardsBySet,
   getCard,
 } from "./cardStore";
 import { CardPriceData, CardSummary } from "@/types";
@@ -38,6 +39,10 @@ export async function searchCardsByNumberId(cardId: string): Promise<CardSummary
 
 export async function searchCardsBySeriesName(query: string): Promise<CardSummary[]> {
   return findCardsBySeries(query);
+}
+
+export async function searchCardsBySetName(query: string): Promise<CardSummary[]> {
+  return findCardsBySet(query);
 }
 
 export async function getCardById(id: string): Promise<CardSummary | null> {

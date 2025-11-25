@@ -106,6 +106,18 @@ export async function findCardsBySeries(query: string) {
   return withPrices;
 }
 
+export async function findCardsBySet(query: string) {
+  await ensureCardCatalog();
+  if (!query.trim()) return [];
+  const cards = await prisma.card.findMany({
+    where: { setName: { contains: query.trim() } },
+    orderBy: [{ setName: "asc" }, { name: "asc" }],
+    take: 50,
+  });
+  const withPrices = await Promise.all(cards.map((card) => toCardSummary(card as DbCard)));
+  return withPrices;
+}
+
 export async function findCardsByNumber(rawId: string) {
   await ensureCardCatalog();
   const trimmed = rawId.trim();

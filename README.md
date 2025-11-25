@@ -43,8 +43,8 @@ The app will be available at `http://localhost:3000`. The `npm run dev` script a
 
 ## Key features
 - **Dashboard** with unique card count, total quantity, estimated collection value, and recent additions.
-- **Search & Add** cards by name or by printed card ID (`number/total` like `158/236`), then add them to your collection with condition, language, finish/variant, notes, and purchase price.
-- **My Collection** views with filters for finish, condition, series, and quick search; sortable columns; table or grid view; pricing per entry; delete actions; inline edit; and a manual "Update prices" button that refreshes stored market data for all cards in your collection.
+- **Search & Add** cards by name, set, series, or by printed card ID (`number/total` like `158/236`), then add them to your collection with condition, language, finish/variant, notes, and purchase price.
+- **My Collection** views with filters for finish, condition, series, set, and quick search; sortable columns; table or grid view; pricing per entry; delete actions; inline edit; and a manual "Update prices" button that refreshes stored market data for all cards in your collection.
 - **Binderless experience**: the collection page now focuses purely on cards without the previous binder workflow.
 - **Card details** page with large imagery and market pricing from the locally stored catalog.
 
