@@ -154,6 +154,14 @@ export async function refreshCardPrice(cardId: string): Promise<CardPriceData | 
       return mappedPrice ?? existingPrice ?? null;
     } catch (err) {
       lastError = err;
+      const message = err instanceof Error ? err.message.toLowerCase() : "";
+      // For 404s or aborted fetches, prefer returning the last stored price instead of retrying aggressively.
+      if (message.includes("404") || message.includes("abort")) {
+        if (existingPrice) {
+          console.warn(`Using stored price for ${cardId} after fetch error:`, err instanceof Error ? err.message : err);
+          return existingPrice;
+        }
+      }
     }
   }
 
