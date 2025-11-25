@@ -2,6 +2,7 @@ import { prisma } from "./prisma";
 import { CardPriceData, CardSummary } from "@/types";
 import { Card } from "@prisma/client";
 import sampleCards from "../../data/sample-cards.json";
+import { generateDeterministicPrice } from "./pricing";
 
 type DbCard = Card & { priceJson: string | null };
 
@@ -16,20 +17,36 @@ function parsePrice(priceJson: string | null): CardPriceData | null {
   }
 }
 
-function toCardSummary(card: DbCard): CardSummary {
-  return {
+async function ensurePrice(card: DbCard): Promise<DbCard> {
+  const parsed = parsePrice(card.priceJson);
+  if (parsed) return card;
+
+  const generated = generateDeterministicPrice({
     id: card.id,
     name: card.name,
-    setId: card.setId,
-    setName: card.setName,
-    setSeries: card.setSeries,
-    printedTotal: card.printedTotal,
-    number: card.number,
-    rarity: card.rarity,
-    imageSmallUrl: card.imageSmallUrl,
-    imageLargeUrl: card.imageLargeUrl,
-    tcgplayerProductId: card.tcgplayerProductId,
-    price: parsePrice(card.priceJson),
+    rarity: card.rarity ?? undefined,
+  });
+
+  const priceJson = JSON.stringify(generated);
+  await prisma.card.update({ where: { id: card.id }, data: { priceJson } });
+  return { ...card, priceJson };
+}
+
+async function toCardSummary(card: DbCard): Promise<CardSummary> {
+  const cardWithPrice = await ensurePrice(card);
+  return {
+    id: cardWithPrice.id,
+    name: cardWithPrice.name,
+    setId: cardWithPrice.setId,
+    setName: cardWithPrice.setName,
+    setSeries: cardWithPrice.setSeries,
+    printedTotal: cardWithPrice.printedTotal,
+    number: cardWithPrice.number,
+    rarity: cardWithPrice.rarity,
+    imageSmallUrl: cardWithPrice.imageSmallUrl,
+    imageLargeUrl: cardWithPrice.imageLargeUrl,
+    tcgplayerProductId: cardWithPrice.tcgplayerProductId,
+    price: parsePrice(cardWithPrice.priceJson),
   };
 }
 
@@ -68,7 +85,8 @@ export async function findCardsByName(query: string) {
     orderBy: [{ name: "asc" }],
     take: 50,
   });
-  return cards.map(toCardSummary);
+  const withPrices = await Promise.all(cards.map((card) => toCardSummary(card as DbCard)));
+  return withPrices;
 }
 
 export async function findCardsByNumber(rawId: string) {
@@ -87,7 +105,9 @@ export async function findCardsByNumber(rawId: string) {
     take: 50,
   });
 
-  if (primaryMatches.length) return primaryMatches.map(toCardSummary);
+  if (primaryMatches.length) {
+    return Promise.all(primaryMatches.map((card) => toCardSummary(card as DbCard)));
+  }
 
   const fallbackMatches = await prisma.card.findMany({
     where: {
@@ -96,13 +116,14 @@ export async function findCardsByNumber(rawId: string) {
     orderBy: [{ name: "asc" }],
     take: 50,
   });
-  return fallbackMatches.map(toCardSummary);
+  return Promise.all(fallbackMatches.map((card) => toCardSummary(card as DbCard)));
 }
 
 export async function getCard(id: string) {
   await ensureCardCatalog();
   const card = await prisma.card.findUnique({ where: { id } });
-  return card ? toCardSummary(card) : null;
+  if (!card) return null;
+  return toCardSummary(card as DbCard);
 }
 
 export function mapCardToDb(card: CardSummary) {
