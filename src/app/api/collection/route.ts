@@ -3,11 +3,11 @@ import { prisma } from "@/lib/prisma";
 import { CardSummary, FinishVariant, CardCondition } from "@/types";
 
 function mapFinishToDb(finish: FinishVariant) {
-  return finish.replace(" ", "");
+  return finish;
 }
 
 function mapConditionToDb(condition: CardCondition) {
-  return condition.replace(" ", "");
+  return condition;
 }
 
 export async function GET() {

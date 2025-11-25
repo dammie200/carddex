@@ -10,26 +10,6 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-enum Condition {
-  Mint
-  NearMint
-  LightlyPlayed
-  ModeratelyPlayed
-  HeavilyPlayed
-  Damaged
-}
-
-enum Finish {
-  Normal
-  Holo
-  ReverseHolo
-  FullArt
-  Gold
-  Rainbow
-  TrainerGallery
-  Other
-}
-
 model Card {
   id                 String   @id
   name               String
@@ -50,9 +30,9 @@ model CollectionEntry {
   cardId        String
   card          Card      @relation(fields: [cardId], references: [id])
   quantity      Int       @default(1)
-  condition     Condition @default(NearMint)
+  condition     String    @default("Near Mint")
   language      String    @default("EN")
-  finish        Finish    @default(Normal)
+  finish        String    @default("Normal")
   purchasePrice Float?
   notes         String?
   createdAt     DateTime  @default(now())
