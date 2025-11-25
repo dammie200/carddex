@@ -113,8 +113,16 @@ async function fetchJson(url: string, opts: { allow404Empty?: boolean } = {}) {
 export async function searchCardsByName(query: string): Promise<CardSummary[]> {
   if (!query) return [];
   const sanitized = query.trim();
-  const url = `${API_BASE}/cards?q=name:${encodeURIComponent(sanitized)}*`;
-  const data = await fetchJson(url, { allow404Empty: true });
+  if (!sanitized) return [];
+
+  const exactUrl = `${API_BASE}/cards?q=${encodeURIComponent(`name:"${sanitized}"`)}`;
+  let data = await fetchJson(exactUrl, { allow404Empty: true });
+
+  if (!data.data?.length) {
+    const fallbackUrl = `${API_BASE}/cards?q=${encodeURIComponent(`name:${sanitized}`)}`;
+    data = await fetchJson(fallbackUrl, { allow404Empty: true });
+  }
+
   return (data.data || []).map((card: any) => mapCard(card));
 }
 
