@@ -4,6 +4,8 @@ const API_BASE = "https://api.pokemontcg.io/v2";
 const API_KEY = process.env.POKEMONTCG_API_KEY;
 
 const cardCache = new Map<string, { card: CardSummary; fetchedAt: number }>();
+const nameSearchCache = new Map<string, { results: CardSummary[]; fetchedAt: number }>();
+const numberSearchCache = new Map<string, { results: CardSummary[]; fetchedAt: number }>();
 const CACHE_TTL_MS = 10 * 60 * 1000;
 
 function addVariant(
@@ -99,7 +101,7 @@ async function fetchJson(
   opts: { allow404Empty?: boolean; timeoutMs?: number } = {}
 ) {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), opts.timeoutMs ?? 10000);
+  const timeout = setTimeout(() => controller.abort(), opts.timeoutMs ?? 7000);
 
   try {
     const res = await fetch(url, {
@@ -135,20 +137,34 @@ export async function searchCardsByName(query: string): Promise<CardSummary[]> {
   const sanitized = query.trim();
   if (!sanitized) return [];
 
+  const cached = nameSearchCache.get(sanitized);
+  const isFresh = cached && Date.now() - cached.fetchedAt < CACHE_TTL_MS;
+
   const exactUrl = `${API_BASE}/cards?q=${encodeURIComponent(`name:"${sanitized}"`)}`;
-  let data = await fetchJson(exactUrl, { allow404Empty: true });
+  try {
+    let data = await fetchJson(exactUrl, { allow404Empty: true });
 
-  if (!data.data?.length) {
-    const fallbackUrl = `${API_BASE}/cards?q=${encodeURIComponent(`name:${sanitized}`)}`;
-    data = await fetchJson(fallbackUrl, { allow404Empty: true });
+    if (!data.data?.length) {
+      const fallbackUrl = `${API_BASE}/cards?q=${encodeURIComponent(`name:${sanitized}`)}`;
+      data = await fetchJson(fallbackUrl, { allow404Empty: true });
+    }
+
+    const results = (data.data || []).map((card: any) => mapCard(card));
+    nameSearchCache.set(sanitized, { results, fetchedAt: Date.now() });
+    return results;
+  } catch (error) {
+    if (isFresh && cached) {
+      return cached.results;
+    }
+    throw error;
   }
-
-  return (data.data || []).map((card: any) => mapCard(card));
 }
 
 export async function searchCardsByNumberId(cardId: string): Promise<CardSummary[]> {
   const trimmed = cardId.trim();
   if (!trimmed) return [];
+  const cached = numberSearchCache.get(trimmed);
+  const isFresh = cached && Date.now() - cached.fetchedAt < CACHE_TTL_MS;
   const parts = trimmed.split("/");
   const number = parts[0];
   const total = parts[1];
@@ -158,13 +174,22 @@ export async function searchCardsByNumberId(cardId: string): Promise<CardSummary
   }
   const url = `${API_BASE}/cards?q=${encodeURIComponent(queryParts.join(" "))}`;
 
-  let data = await fetchJson(url, { allow404Empty: true });
-  if ((!data.data || data.data.length === 0) && total) {
-    const fallbackUrl = `${API_BASE}/cards?q=${encodeURIComponent(`number:${number}`)}`;
-    data = await fetchJson(fallbackUrl, { allow404Empty: true });
-  }
+  try {
+    let data = await fetchJson(url, { allow404Empty: true });
+    if ((!data.data || data.data.length === 0) && total) {
+      const fallbackUrl = `${API_BASE}/cards?q=${encodeURIComponent(`number:${number}`)}`;
+      data = await fetchJson(fallbackUrl, { allow404Empty: true });
+    }
 
-  return (data.data || []).map((card: any) => mapCard(card));
+    const results = (data.data || []).map((card: any) => mapCard(card));
+    numberSearchCache.set(trimmed, { results, fetchedAt: Date.now() });
+    return results;
+  } catch (error) {
+    if (isFresh && cached) {
+      return cached.results;
+    }
+    throw error;
+  }
 }
 
 export async function getCardById(id: string): Promise<CardSummary | null> {
@@ -176,11 +201,14 @@ export async function getCardById(id: string): Promise<CardSummary | null> {
   const url = `${API_BASE}/cards/${id}`;
   try {
     const data = await fetchJson(url, { allow404Empty: true });
-    if (!data?.data) return null;
+    if (!data?.data) return cached?.card ?? null;
     const mapped = mapCard(data.data, true);
     cardCache.set(id, { card: mapped, fetchedAt: Date.now() });
     return mapped;
   } catch (error) {
+    if (cached) {
+      return cached.card;
+    }
     if (error instanceof Error) {
       if (error.message.includes("404")) return null;
       // If the upstream API is flaky, return null so the UI can still render existing data.
@@ -188,6 +216,6 @@ export async function getCardById(id: string): Promise<CardSummary | null> {
         return null;
       }
     }
-    throw error;
+    return null;
   }
 }

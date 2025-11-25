@@ -52,6 +52,12 @@ export function SearchClient() {
           <input
             value={numberQuery}
             onChange={(e) => setNumberQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                search("number");
+              }
+            }}
             placeholder="e.g. 158/236"
             className="flex-1 rounded border border-amber-300/40 bg-slate-950/60 p-2 text-white"
           />
