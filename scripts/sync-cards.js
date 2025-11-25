@@ -17,25 +17,7 @@ const PAGE_SIZE = 250;
 const MAX_PAGES = 200;
 
 const SAMPLE_PATH = path.join(__dirname, "../data/sample-cards.json");
-
-function loadLocalDataset() {
-  try {
-    // The pokemon-tcg-data package bundles the full catalog so we can seed without relying on network calls.
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const cards = require("pokemon-tcg-data/json/cards/en.json");
-    if (Array.isArray(cards) && cards.length) {
-      console.log(`Loaded local pokemon-tcg-data package (${cards.length} cards).`);
-      return cards;
-    }
-    throw new Error("pokemon-tcg-data returned no cards");
-  } catch (err) {
-    const message =
-      err.code === "MODULE_NOT_FOUND"
-        ? "pokemon-tcg-data is missing. Run `npm install` to download the full catalog dependency before syncing."
-        : `Unable to read pokemon-tcg-data: ${err.message}`;
-    throw new Error(message);
-  }
-}
+const ALLOW_SAMPLE_FALLBACK = process.env.ALLOW_SAMPLE_FALLBACK === "1";
 
 function coalesce(...values) {
   for (const val of values) {
@@ -217,18 +199,6 @@ async function fetchPage(page) {
 
 async function fetchCatalog() {
   try {
-    return loadLocalDataset();
-  } catch (err) {
-    console.error(err.message);
-    if (!process.env.ALLOW_SAMPLE_FALLBACK) {
-      throw new Error(
-        "Full catalog missing. Install dependencies to get pokemon-tcg-data or set ALLOW_SAMPLE_FALLBACK=1 to use the tiny sample dataset."
-      );
-    }
-    console.warn("ALLOW_SAMPLE_FALLBACK enabled; continuing with limited sample data.");
-  }
-
-  try {
     console.log("Fetching catalog from GitHub dataset...");
     const data = await fetchFromGithub();
     if (Array.isArray(data) && data.length) {
@@ -257,8 +227,14 @@ async function fetchCatalog() {
     console.warn("API pagination failed:", err.message);
   }
 
-  console.warn("All remote catalog sources failed. Falling back to bundled sample data.");
-  return fetchFromSample();
+  if (ALLOW_SAMPLE_FALLBACK) {
+    console.warn("All remote catalog sources failed. Falling back to bundled sample data because ALLOW_SAMPLE_FALLBACK=1.");
+    return fetchFromSample();
+  }
+
+  throw new Error(
+    "All catalog sources failed. Ensure network access to GitHub or the PokémonTCG API, or set ALLOW_SAMPLE_FALLBACK=1 to allow the tiny bundled sample."
+  );
 }
 
 async function main() {
