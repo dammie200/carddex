@@ -1,4 +1,10 @@
-import { ensureCardCatalog, findCardsByName, findCardsByNumber, getCard, mapCardToDb } from "./cardStore";
+import {
+  ensureCardCatalog,
+  findCardsByName,
+  findCardsByNumber,
+  getCard,
+  mapCardToDb,
+} from "./cardStore";
 import { CardPriceData, CardSummary, FinishVariant } from "@/types";
 import { prisma } from "./prisma";
 
@@ -25,6 +31,17 @@ async function fetchWithTimeout(url: string, init: RequestInit = {}, timeoutMs =
     return res.json();
   } finally {
     clearTimeout(timer);
+  }
+}
+
+function parseStoredPrice(priceJson: string | null): CardPriceData | null {
+  if (!priceJson) return null;
+  try {
+    const parsed = JSON.parse(priceJson);
+    if (!parsed || typeof parsed !== "object") return null;
+    return parsed as CardPriceData;
+  } catch (err) {
+    return null;
   }
 }
 
@@ -92,6 +109,8 @@ export async function ensureCatalogSeeded() {
 }
 
 export async function refreshCardPrice(cardId: string): Promise<CardPriceData | null> {
+  const existing = await prisma.card.findUnique({ where: { id: cardId }, select: { priceJson: true } });
+  const existingPrice = parseStoredPrice(existing?.priceJson ?? null);
   try {
     const json = await fetchWithTimeout(`${POKEMONTCG_API}/cards/${cardId}`);
     const card = json?.data;
@@ -119,6 +138,10 @@ export async function refreshCardPrice(cardId: string): Promise<CardPriceData | 
     }
     return mappedPrice;
   } catch (err) {
+    if (existingPrice) {
+      console.warn(`Using stored price for ${cardId} after refresh error:`, err instanceof Error ? err.message : err);
+      return existingPrice;
+    }
     console.error(`Failed to refresh price for ${cardId}:`, err);
     return null;
   }
