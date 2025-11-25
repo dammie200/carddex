@@ -1,9 +1,17 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Image from "next/image";
 import { CardSummary } from "@/types";
 import { CardResult } from "@/components/CardResult";
 import { AddToCollectionForm } from "@/components/AddToCollectionForm";
+
+function getCardPrice(card: CardSummary): number | null {
+  const variants = card.price?.variants ?? [];
+  if (!variants.length) return null;
+  const variant = variants[0];
+  return variant.marketPrice ?? variant.lowPrice ?? variant.midPrice ?? variant.highPrice ?? null;
+}
 
 export function SearchClient() {
   const [nameQuery, setNameQuery] = useState("");
@@ -22,9 +30,9 @@ export function SearchClient() {
     try {
       const q = type === "name" ? nameQuery : type === "series" ? seriesQuery : numberQuery;
       const res = await fetch(
-        `/api/search/${
-          type === "name" ? "name" : type === "series" ? "series" : "number"
-        }?${type === "number" ? `id=${encodeURIComponent(q)}` : `q=${encodeURIComponent(q)}`}`
+        `/api/search/${type === "name" ? "name" : type === "series" ? "series" : "number"}?${
+          type === "number" ? `id=${encodeURIComponent(q)}` : `q=${encodeURIComponent(q)}`
+        }`
       );
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to search");
@@ -131,13 +139,50 @@ export function SearchClient() {
       </section>
 
       {selected && (
-        <section className="space-y-3">
-          <div className="text-lg font-semibold text-amber-100">{selected.name}</div>
-          <div className="text-sm text-slate-300">
-            {selected.setName} · #{selected.number}
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+          <div className="w-full max-w-5xl rounded-xl border border-slate-800 bg-slate-900 p-4 shadow-2xl">
+            <div className="flex items-start justify-between gap-3">
+              <div className="text-lg font-semibold text-amber-100">Add to collection</div>
+              <button
+                onClick={() => setSelected(null)}
+                className="rounded px-3 py-1 text-slate-200 hover:bg-slate-800"
+              >
+                Close
+              </button>
+            </div>
+            <div className="mt-3 grid gap-4 md:grid-cols-[280px,1fr]">
+              <div className="flex flex-col items-center gap-3">
+                <Image
+                  src={selected.imageLargeUrl || selected.imageSmallUrl}
+                  alt={selected.name}
+                  width={260}
+                  height={340}
+                  className="rounded"
+                />
+                <div className="text-center">
+                  <div className="font-semibold text-amber-100">{selected.name}</div>
+                  <div className="text-sm text-slate-300">{selected.setName}</div>
+                  <div className="text-xs text-slate-400">
+                    #{selected.number}
+                    {selected.printedTotal ? `/${selected.printedTotal}` : ""}
+                  </div>
+                  <div className="text-sm text-emerald-200">{(() => {
+                    const price = getCardPrice(selected);
+                    return price ? `$${price.toFixed(2)}` : "--";
+                  })()}</div>
+                </div>
+              </div>
+              <div className="space-y-3">
+                <div className="space-y-1">
+                  <div className="text-lg font-semibold text-amber-100">{selected.name}</div>
+                  <div className="text-sm text-slate-300">{selected.setName}</div>
+                  {selected.rarity && <div className="text-xs text-amber-200">{selected.rarity}</div>}
+                </div>
+                <AddToCollectionForm card={selected} onSaved={() => setSelected(null)} />
+              </div>
+            </div>
           </div>
-          <AddToCollectionForm card={selected} onSaved={() => setSelected(null)} />
-        </section>
+        </div>
       )}
     </div>
   );
