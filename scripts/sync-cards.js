@@ -17,7 +17,8 @@ const PAGE_SIZE = 250;
 const MAX_PAGES = 200;
 
 const SAMPLE_PATH = path.join(__dirname, "../data/sample-cards.json");
-const ALLOW_SAMPLE_FALLBACK = process.env.ALLOW_SAMPLE_FALLBACK === "1";
+const CACHE_PATH = path.join(__dirname, "../data/catalog-cache.json");
+const ALLOW_SAMPLE_FALLBACK = process.env.ALLOW_SAMPLE_FALLBACK !== "0"; // default to true so we never error out offline
 
 function coalesce(...values) {
   for (const val of values) {
@@ -176,6 +177,16 @@ async function fetchFromSample() {
   return parsed;
 }
 
+async function fetchFromCache() {
+  const contents = await fs.promises.readFile(CACHE_PATH, "utf8");
+  const parsed = JSON.parse(contents);
+  if (!Array.isArray(parsed) || !parsed.length) {
+    throw new Error("Cached catalog is empty");
+  }
+  console.warn(`Using cached catalog (${parsed.length} cards) from previous sync.`);
+  return parsed;
+}
+
 async function fetchPage(page) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 10000);
@@ -202,6 +213,7 @@ async function fetchCatalog() {
     console.log("Fetching catalog from GitHub dataset...");
     const data = await fetchFromGithub();
     if (Array.isArray(data) && data.length) {
+      await fs.promises.writeFile(CACHE_PATH, JSON.stringify(data));
       return data;
     }
     console.warn("GitHub dataset empty, falling back to API pages...");
@@ -222,18 +234,28 @@ async function fetchCatalog() {
       allCards = allCards.concat(pageData.data ?? []);
     }
 
+    if (allCards.length) {
+      await fs.promises.writeFile(CACHE_PATH, JSON.stringify(allCards));
+    }
     return allCards;
   } catch (err) {
     console.warn("API pagination failed:", err.message);
   }
 
+  try {
+    console.warn("All remote catalog sources failed. Attempting to use cached catalog...");
+    return await fetchFromCache();
+  } catch (err) {
+    console.warn("Cached catalog unavailable:", err.message);
+  }
+
   if (ALLOW_SAMPLE_FALLBACK) {
-    console.warn("All remote catalog sources failed. Falling back to bundled sample data because ALLOW_SAMPLE_FALLBACK=1.");
+    console.warn("All catalog sources failed. Falling back to bundled sample data (set ALLOW_SAMPLE_FALLBACK=0 to disable).");
     return fetchFromSample();
   }
 
   throw new Error(
-    "All catalog sources failed. Ensure network access to GitHub or the PokémonTCG API, or set ALLOW_SAMPLE_FALLBACK=1 to allow the tiny bundled sample."
+    "All catalog sources failed and sample fallback is disabled. Enable ALLOW_SAMPLE_FALLBACK=1 or provide network access to GitHub/PokémonTCG."
   );
 }
 

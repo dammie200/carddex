@@ -24,7 +24,7 @@ npm run prisma:generate  # optional; dev server will also generate the client wh
 npm run sync:cards       # pulls the PokémonTCG catalog into SQLite for fast local searches
 ```
 
-> Important: The sync script fetches the public PokémonTCG GitHub dataset first, then falls back to the paginated PokémonTCG API. If both remote sources fail (for example because of network/firewall limits), the script will exit with a clear error unless you explicitly allow the tiny bundled sample by setting `ALLOW_SAMPLE_FALLBACK=1` before running it.
+> Important: The sync script now tries, in order: the public PokémonTCG GitHub dataset, the paginated PokémonTCG API, a cached copy from your last successful sync (`data/catalog-cache.json`), and finally the tiny bundled sample (enabled by default). Set `ALLOW_SAMPLE_FALLBACK=0` to skip the sample and force a real catalog when you have network access.
 
 Syncing is non-destructive: it upserts cards and preserves any existing collection entries referencing them. You can re-run `npm run sync:cards` anytime to refresh cards and price data.
 
