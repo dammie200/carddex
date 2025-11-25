@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { CardSummary, FinishVariant, CardCondition } from "@/types";
+import { getCardById } from "@/lib/pokemontcg";
 
 function mapFinishToDb(finish: FinishVariant) {
   return finish;
@@ -15,7 +16,18 @@ export async function GET() {
     include: { card: true },
     orderBy: { createdAt: "desc" },
   });
-  return NextResponse.json({ entries });
+
+  const withPrices = await Promise.all(
+    entries.map(async (entry) => {
+      const remoteCard = await getCardById(entry.cardId);
+      return {
+        ...entry,
+        price: remoteCard?.price ?? null,
+      };
+    })
+  );
+
+  return NextResponse.json({ entries: withPrices });
 }
 
 export async function POST(request: Request) {

@@ -91,7 +91,7 @@ function mapCard(card: any, includePrices = false): CardSummary {
   } as CardSummary;
 }
 
-async function fetchJson(url: string) {
+async function fetchJson(url: string, opts: { allow404Empty?: boolean } = {}) {
   const res = await fetch(url, {
     headers: {
       "Content-Type": "application/json",
@@ -99,6 +99,11 @@ async function fetchJson(url: string) {
     },
     next: { revalidate: 60 },
   });
+
+  if (res.status === 404 && opts.allow404Empty) {
+    return { data: [] };
+  }
+
   if (!res.ok) {
     throw new Error(`PokémonTCG API error ${res.status}`);
   }
@@ -108,7 +113,7 @@ async function fetchJson(url: string) {
 export async function searchCardsByName(query: string): Promise<CardSummary[]> {
   if (!query) return [];
   const url = `${API_BASE}/cards?q=name:${encodeURIComponent(query)}`;
-  const data = await fetchJson(url);
+  const data = await fetchJson(url, { allow404Empty: true });
   return (data.data || []).map((card: any) => mapCard(card));
 }
 
@@ -123,13 +128,24 @@ export async function searchCardsByNumberId(cardId: string): Promise<CardSummary
     queryParts.push(`set.printedTotal:${total}`);
   }
   const url = `${API_BASE}/cards?q=${encodeURIComponent(queryParts.join(" "))}`;
-  const data = await fetchJson(url);
+
+  let data = await fetchJson(url, { allow404Empty: true });
+  if ((!data.data || data.data.length === 0) && total) {
+    const fallbackUrl = `${API_BASE}/cards?q=${encodeURIComponent(`number:${number}`)}`;
+    data = await fetchJson(fallbackUrl, { allow404Empty: true });
+  }
+
   return (data.data || []).map((card: any) => mapCard(card));
 }
 
 export async function getCardById(id: string): Promise<CardSummary | null> {
   const url = `${API_BASE}/cards/${id}`;
-  const data = await fetchJson(url);
-  if (!data?.data) return null;
-  return mapCard(data.data, true);
+  try {
+    const data = await fetchJson(url, { allow404Empty: true });
+    if (!data?.data) return null;
+    return mapCard(data.data, true);
+  } catch (error) {
+    if (error instanceof Error && error.message.includes("404")) return null;
+    throw error;
+  }
 }

@@ -1,12 +1,18 @@
 import { prisma } from "@/lib/prisma";
 import Link from "next/link";
+import { getCardById } from "@/lib/pokemontcg";
 
 type DashboardStats = {
   totalQuantity: number;
   uniqueCards: number;
+  estimatedValue: number;
   recent: Awaited<ReturnType<typeof prisma.collectionEntry.findMany>>;
   error?: string;
 };
+
+function normalizedFinish(value: string) {
+  return value.toLowerCase().replace(/\s+/g, "");
+}
 
 async function getStats(): Promise<DashboardStats> {
   try {
@@ -15,9 +21,22 @@ async function getStats(): Promise<DashboardStats> {
       prisma.collectionEntry.findMany({ distinct: ["cardId"], select: { cardId: true } }),
       prisma.collectionEntry.findMany({ include: { card: true }, orderBy: { createdAt: "desc" }, take: 5 }),
     ]);
+
+    const prices = await Promise.all(
+      entries.map(async (entry) => {
+        const remote = await getCardById(entry.cardId);
+        const variants = remote?.price?.variants ?? [];
+        const match = variants.find((v) => normalizedFinish(v.finish) === normalizedFinish(entry.finish));
+        const variant = match ?? variants[0];
+        return variant?.marketPrice ? variant.marketPrice * entry.quantity : 0;
+      })
+    );
+
+    const estimatedValue = prices.reduce((acc, val) => acc + val, 0);
     return {
       totalQuantity: totalEntries._sum.quantity ?? 0,
       uniqueCards: uniqueCardIds.length,
+      estimatedValue,
       recent: entries,
     };
   } catch (error) {
@@ -25,6 +44,7 @@ async function getStats(): Promise<DashboardStats> {
     return {
       totalQuantity: 0,
       uniqueCards: 0,
+      estimatedValue: 0,
       recent: [],
       error: "Database not initialized. Run 'npm run prisma:migrate' once to create the tables.",
     };
@@ -43,7 +63,11 @@ export default async function DashboardPage() {
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
         <StatCard label="Unique cards" value={stats.uniqueCards} />
         <StatCard label="Total cards" value={stats.totalQuantity} />
-        <StatCard label="Estimated value" value="$--" description="Pricing loads per card" />
+        <StatCard
+          label="Estimated value"
+          value={stats.estimatedValue ? `$${stats.estimatedValue.toFixed(2)}` : "$--"}
+          description="Based on latest market prices"
+        />
       </div>
 
       <section className="space-y-3">

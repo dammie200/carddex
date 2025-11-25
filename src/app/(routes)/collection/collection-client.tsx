@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import { FinishVariant, CardCondition } from "@/types";
+import type { CardPriceData } from "@/types";
 
 interface CollectionEntry {
   id: number;
@@ -12,6 +13,7 @@ interface CollectionEntry {
   finish: string;
   purchasePrice?: number | null;
   notes?: string | null;
+  price?: CardPriceData | null;
   card: {
     id: string;
     name: string;
@@ -49,6 +51,23 @@ export function CollectionClient() {
   const [query, setQuery] = useState("");
   const [finishFilter, setFinishFilter] = useState<string>("all");
   const [conditionFilter, setConditionFilter] = useState<string>("all");
+
+  function normalizedFinish(value: string) {
+    return value.toLowerCase().replace(/\s+/g, "");
+  }
+
+  function getMarketPrice(entry: CollectionEntry): number | null {
+    const variants = entry.price?.variants ?? [];
+    if (!variants.length) return null;
+    const match = variants.find((v) => normalizedFinish(v.finish) === normalizedFinish(entry.finish));
+    const variant = match ?? variants[0];
+    return variant.marketPrice ?? null;
+  }
+
+  async function deleteEntry(id: number) {
+    await fetch(`/api/collection/${id}`, { method: "DELETE" });
+    setEntries((prev) => prev.filter((e) => e.id !== id));
+  }
 
   useEffect(() => {
     async function load() {
@@ -121,6 +140,7 @@ export function CollectionClient() {
               <th className="px-3 py-2 text-left font-semibold">Condition</th>
               <th className="px-3 py-2 text-left font-semibold">Finish</th>
               <th className="px-3 py-2 text-left font-semibold">Estimated Value</th>
+              <th className="px-3 py-2 text-left font-semibold">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -143,7 +163,22 @@ export function CollectionClient() {
                 <td className="px-3 py-3">{entry.quantity}</td>
                 <td className="px-3 py-3">{entry.condition.replace(/([A-Z])/g, " $1").trim()}</td>
                 <td className="px-3 py-3">{entry.finish.replace("Holo", " Holo").trim()}</td>
-                <td className="px-3 py-3 text-amber-200">--</td>
+                <td className="px-3 py-3 text-amber-200">
+                  {(() => {
+                    const price = getMarketPrice(entry);
+                    if (!price) return "--";
+                    const total = price * entry.quantity;
+                    return `$${total.toFixed(2)}`;
+                  })()}
+                </td>
+                <td className="px-3 py-3 text-right">
+                  <button
+                    onClick={() => deleteEntry(entry.id)}
+                    className="rounded border border-rose-500/50 px-3 py-1 text-xs font-semibold text-rose-200 hover:bg-rose-500/10"
+                  >
+                    Delete
+                  </button>
+                </td>
               </tr>
             ))}
           </tbody>
