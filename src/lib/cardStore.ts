@@ -1,13 +1,19 @@
 import { prisma } from "./prisma";
 import { CardPriceData, CardSummary } from "@/types";
-import { Card, Prisma } from "@prisma/client";
+import { Card } from "@prisma/client";
 import sampleCards from "../../data/sample-cards.json";
 
-type DbCard = Card & { priceJson: Prisma.JsonValue | null };
+type DbCard = Card & { priceJson: string | null };
 
-function parsePrice(priceJson: Prisma.JsonValue | null): CardPriceData | null {
-  if (!priceJson || typeof priceJson !== "object") return null;
-  return priceJson as CardPriceData;
+function parsePrice(priceJson: string | null): CardPriceData | null {
+  if (!priceJson) return null;
+  try {
+    const parsed = JSON.parse(priceJson);
+    if (!parsed || typeof parsed !== "object") return null;
+    return parsed as CardPriceData;
+  } catch (e) {
+    return null;
+  }
 }
 
 function toCardSummary(card: DbCard): CardSummary {
@@ -40,7 +46,7 @@ function toDbCard(card: CardSummary) {
     imageSmallUrl: card.imageSmallUrl,
     imageLargeUrl: card.imageLargeUrl,
     tcgplayerProductId: card.tcgplayerProductId ?? null,
-    priceJson: card.price ?? null,
+    priceJson: card.price ? JSON.stringify(card.price) : null,
   };
 }
 

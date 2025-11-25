@@ -3,6 +3,17 @@ import { prisma } from "@/lib/prisma";
 import { CardSummary, FinishVariant, CardCondition, CardPriceData } from "@/types";
 import { mapCardToDb } from "@/lib/cardStore";
 
+function parsePrice(priceJson: string | null): CardPriceData | null {
+  if (!priceJson) return null;
+  try {
+    const parsed = JSON.parse(priceJson);
+    if (!parsed || typeof parsed !== "object") return null;
+    return parsed as CardPriceData;
+  } catch {
+    return null;
+  }
+}
+
 function mapFinishToDb(finish: FinishVariant) {
   return finish;
 }
@@ -19,7 +30,7 @@ export async function GET() {
 
   const mapped = entries.map((entry) => ({
     ...entry,
-    price: (entry.card.priceJson as CardPriceData | null) ?? null,
+    price: parsePrice(entry.card.priceJson),
   }));
 
   return NextResponse.json({ entries: mapped });

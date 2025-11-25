@@ -72,6 +72,7 @@ function mapPricesFromCard(card) {
 }
 
 function mapCard(card) {
+  const price = mapPricesFromCard(card);
   return {
     id: card.id,
     name: card.name,
@@ -84,7 +85,7 @@ function mapCard(card) {
     imageSmallUrl: card.images?.small ?? "",
     imageLargeUrl: card.images?.large ?? "",
     tcgplayerProductId: card.tcgplayer?.productId ?? null,
-    priceJson: mapPricesFromCard(card),
+    priceJson: price ? JSON.stringify(price) : null,
   };
 }
 

@@ -14,6 +14,17 @@ function normalizedFinish(value: string) {
   return value.toLowerCase().replace(/\s+/g, "");
 }
 
+function parsePrice(priceJson: string | null): CardPriceData | null {
+  if (!priceJson) return null;
+  try {
+    const parsed = JSON.parse(priceJson);
+    if (!parsed || typeof parsed !== "object") return null;
+    return parsed as CardPriceData;
+  } catch {
+    return null;
+  }
+}
+
 async function getStats(): Promise<DashboardStats> {
   try {
     const [totalEntries, uniqueCardIds, entries] = await Promise.all([
@@ -23,7 +34,7 @@ async function getStats(): Promise<DashboardStats> {
     ]);
 
     const prices = entries.map((entry) => {
-      const price = entry.card.priceJson as CardPriceData | null;
+      const price = parsePrice(entry.card.priceJson);
       const variants = price?.variants ?? [];
       const match = variants.find((v) => normalizedFinish(v.finish) === normalizedFinish(entry.finish));
       const variant = match ?? variants[0];
