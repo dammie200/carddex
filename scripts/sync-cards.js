@@ -9,8 +9,10 @@ const path = require("path");
 const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient({ log: ["warn", "error"] });
 
-const GITHUB_CARDS_URL =
-  "https://raw.githubusercontent.com/PokemonTCG/pokemon-tcg-data/master/cards/en.json";
+const GITHUB_SETS_URL =
+  "https://raw.githubusercontent.com/PokemonTCG/pokemon-tcg-data/master/sets/en.json";
+const GITHUB_CARDS_BASE =
+  "https://raw.githubusercontent.com/PokemonTCG/pokemon-tcg-data/master/cards/en";
 const API_BASE = "https://api.pokemontcg.io/v2";
 const API_KEY = process.env.POKEMONTCG_API_KEY;
 const PAGE_SIZE = 250;
@@ -158,13 +160,34 @@ function mapCard(card) {
 }
 
 async function fetchFromGithub() {
-  const res = await fetch(GITHUB_CARDS_URL, {
+  const setsRes = await fetch(GITHUB_SETS_URL, {
     headers: { "Content-Type": "application/json" },
   });
-  if (!res.ok) {
-    throw new Error(`Github catalog fetch failed ${res.status}`);
+  if (!setsRes.ok) {
+    throw new Error(`Github sets fetch failed ${setsRes.status}`);
   }
-  return res.json();
+  const sets = await setsRes.json();
+  if (!Array.isArray(sets) || !sets.length) {
+    throw new Error("Github sets payload was empty");
+  }
+
+  const allCards = [];
+  for (const set of sets) {
+    if (!set?.id) continue;
+    const url = `${GITHUB_CARDS_BASE}/${set.id}.json`;
+    const cardsRes = await fetch(url, { headers: { "Content-Type": "application/json" } });
+    if (!cardsRes.ok) {
+      throw new Error(`Github card list fetch failed for ${set.id} (${cardsRes.status})`);
+    }
+    const cards = await cardsRes.json();
+    const count = Array.isArray(cards) ? cards.length : 0;
+    if (count) {
+      allCards.push(...cards);
+    }
+    console.log(`Fetched set ${set.id} (${count} cards)`);
+  }
+
+  return allCards;
 }
 
 async function fetchFromSample() {
